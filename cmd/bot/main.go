@@ -26,5 +26,6 @@ func main() {
 		os.Exit(1)
 	}
 
+	slog.Info("bot has been started")
 	b.Start(ctx)
 }
