@@ -20,7 +20,7 @@ type BotApplication struct {
 
 func New(ctx context.Context, cfg infrastructure.BotConfig, logger *slog.Logger) (BotApplication, error) {
 	opts := []bot.Option{
-		bot.WithDefaultHandler(handlers.DefaultHandler),
+		bot.WithDefaultHandler(handlers.DefaultHandler(logger)),
 	}
 	b, err := bot.New(cfg.Token, opts...)
 	if err != nil {
@@ -49,11 +49,11 @@ func appInit(ctx context.Context, app BotApplication) {
 
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "start",
-		bot.MatchTypeCommand, handlers.StartHandler,
+		bot.MatchTypeCommand, handlers.StartHandler(app.Logger),
 	)
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "help",
-		bot.MatchTypeCommand, handlers.HelpHandler,
+		bot.MatchTypeCommand, handlers.HelpHandler(app.Logger),
 	)
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "track",
@@ -65,10 +65,10 @@ func appInit(ctx context.Context, app BotApplication) {
 	)
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "untrack",
-		bot.MatchTypeCommand, handlers.UntrackHandler,
+		bot.MatchTypeCommand, handlers.UntrackHandler(app.Logger),
 	)
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "list",
-		bot.MatchTypeCommand, handlers.ListHandler,
+		bot.MatchTypeCommand, handlers.ListHandler(app.Logger),
 	)
 }

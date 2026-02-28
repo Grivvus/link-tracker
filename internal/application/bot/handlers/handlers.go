@@ -19,34 +19,40 @@ help - Выводит этот текст
 	`
 )
 
-func DefaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	slog.Warn("Default handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   defaultMsgText,
-	})
-	HelpHandler(ctx, b, update)
-}
-
-func StartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	slog.Info("Start handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   startMsgText,
-	})
-}
-
-func HelpHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	slog.Info("Help handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   helpMsgText,
-	})
-}
-
-func TrackHandler(fsm *fsm.FSM, logger *slog.Logger) bot.HandlerFunc {
+func DefaultHandler(log *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		logger.Info("Track handler was called for", "chat", update.Message.Chat.ID)
+		log.Warn("Default handler was called for", "chat", update.Message.Chat.ID)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   defaultMsgText,
+		})
+		HelpHandler(log)(ctx, b, update)
+	}
+}
+
+func StartHandler(log *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		log.Info("Start handler was called for", "chat", update.Message.Chat.ID)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   startMsgText,
+		})
+	}
+}
+
+func HelpHandler(log *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		log.Info("Help handler was called for", "chat", update.Message.Chat.ID)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   helpMsgText,
+		})
+	}
+}
+
+func TrackHandler(fsm *fsm.FSM, log *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		log.Info("Track handler was called for", "chat", update.Message.Chat.ID)
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
 		switch fsm.Current(userID) {
@@ -81,7 +87,7 @@ func TrackHandler(fsm *fsm.FSM, logger *slog.Logger) bot.HandlerFunc {
 			})
 			fsm.Transition(userID, botfsm.Default, ctx, b, chatID, userID)
 		default:
-			logger.Error(
+			log.Error(
 				"TrackHandler. Illegal state of fsm",
 				"state", fsm.Current(userID),
 				"user", userID,
@@ -90,9 +96,9 @@ func TrackHandler(fsm *fsm.FSM, logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
-func CancelHanlder(fsm *fsm.FSM, logger *slog.Logger) bot.HandlerFunc {
+func CancelHanlder(fsm *fsm.FSM, log *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		logger.Info("Cancel handler was called for", "chat", update.Message.Chat.ID)
+		log.Info("Cancel handler was called for", "chat", update.Message.Chat.ID)
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
 		if fsm.Current(userID) == botfsm.Default {
@@ -110,18 +116,22 @@ func CancelHanlder(fsm *fsm.FSM, logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
-func UntrackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	slog.Info("Untrack handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   "untrack",
-	})
+func UntrackHandler(log *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		log.Info("Untrack handler was called for", "chat", update.Message.Chat.ID)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "untrack",
+		})
+	}
 }
 
-func ListHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	slog.Info("List handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   "list",
-	})
+func ListHandler(log *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		log.Info("List handler was called for", "chat", update.Message.Chat.ID)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "list",
+		})
+	}
 }
