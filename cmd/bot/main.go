@@ -20,12 +20,13 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	b, err := bot.New(ctx, cfg)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	botapp, err := bot.New(ctx, cfg, logger)
 	if err != nil {
 		slog.Error("can't start bot", "with err", err)
 		os.Exit(1)
 	}
 
 	slog.Info("bot has been started")
-	b.Start(ctx)
+	botapp.Bot.Start(ctx)
 }
