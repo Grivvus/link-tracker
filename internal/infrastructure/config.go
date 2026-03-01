@@ -14,6 +14,8 @@ var (
 
 type BotConfig struct {
 	Token string `envconfig:"TOKEN" required:"true"`
+	Host  string `envconfig:"HOST" required:"true"`
+	Port  uint   `envconfig:"PORT" required:"true"`
 }
 
 func LoadBotConfig() (BotConfig, error) {
