@@ -1,4 +1,4 @@
-package fsm
+package bot
 
 import (
 	"context"
@@ -16,7 +16,7 @@ const (
 	Finish  fsm.StateID = "finish"
 )
 
-func New() *fsm.FSM {
+func newFSM() *fsm.FSM {
 	return fsm.New(Default, map[fsm.StateID]fsm.Callback{
 		Start:   StartCallback,
 		AskLink: AskLinkCallback,

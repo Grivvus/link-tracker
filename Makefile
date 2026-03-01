@@ -30,3 +30,14 @@ $(addprefix build_,$(MODULES)):
 test:
 	@go test -coverpkg='github.com/es-debug/backend-academy-2024-go-template/...' --race -count=1 -coverprofile='$(COVERAGE_FILE)' ./...
 	@go tool cover -func='$(COVERAGE_FILE)' | grep ^total | tr -s '\t'
+
+.PHONE: generate-api
+generate-api:
+	@echo "generating client, server and types for scrapper"
+	@go tool oapi-codegen -generate "types" -package scrapper scrapper-api.yml > internal/infrastructure/openapi/scrapper/types.gen.go
+	@go tool oapi-codegen -generate "std-http-server" -package scrapper scrapper-api.yml > internal/infrastructure/openapi/scrapper/server.gen.go
+	@go tool oapi-codegen -generate "client" -package scrapper scrapper-api.yml > internal/infrastructure/openapi/scrapper/client.gen.go
+	@echo "generating client, server and type for bot"
+	@go tool oapi-codegen -generate "types" -package bot bot-api.yml > internal/infrastructure/openapi/bot/types.gen.go
+	@go tool oapi-codegen -generate "std-http-server" -package bot bot-api.yml > internal/infrastructure/openapi/bot/server.gen.go
+	@go tool oapi-codegen -generate "client" -package bot bot-api.yml > internal/infrastructure/openapi/bot/client.gen.go
