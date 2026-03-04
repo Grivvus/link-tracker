@@ -27,7 +27,7 @@ func (s *ScrapperAdapter) DeleteLinks(
 	resp, err := s.Client.DeleteLinks(ctx, params, body)
 	if err != nil {
 		s.log.Error(
-			"ScrapperAdapter, DeleteLinkRequest",
+			"can't make request DeleteLinks",
 			"err", err,
 			"for chat", chatID,
 		)
@@ -49,7 +49,7 @@ func (s *ScrapperAdapter) DeleteLinks(
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
 		s.log.Error(
-			"ScrapperAdapter, DeleteLinkRequest, can't decode response",
+			"can't decode response from DeleteLinks request",
 			"err", err,
 			"for chat", chatID,
 		)
@@ -69,7 +69,7 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	resp, err := s.Client.GetLinks(ctx, params)
 	if err != nil {
 		s.log.Error(
-			"ScrapperAdapter, GetTrackedLinks",
+			"can't make request GetLinks",
 			"err", err,
 			"for chat", chatID,
 		)
@@ -91,7 +91,7 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
 		s.log.Error(
-			"ScrapperAdapter, DeleteLinkRequest, can't decode response",
+			"can't decode response from GetLinks",
 			"err", err,
 			"for chat", chatID,
 		)
@@ -121,11 +121,11 @@ func (s *ScrapperAdapter) AddLinks(
 	resp, err := s.Client.PostLinks(ctx, &params, body)
 	if err != nil {
 		s.log.Error(
-			"ScrapperAdapter, AddLinks",
+			"can't make PostLinks request",
 			"err", err,
 			"for chat", chatID,
 		)
-		return dto.AddLinksResponse{}, errors.New("")
+		return dto.AddLinksResponse{}, errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
@@ -155,14 +155,56 @@ func (s *ScrapperAdapter) AddLinks(
 	return linkResponseToDTO(respBody), nil
 }
 
-func (s *ScrapperAdapter) DelteTGChat(
+func (s *ScrapperAdapter) DeleteTGChat(
 	ctx context.Context, in dto.DeleteChat,
 ) error {
+	resp, err := s.Client.DeleteTgChatId(ctx, in.ChatID)
+	if err != nil {
+		slog.Error(
+			"can't make request DeleteTGChat",
+			"err", err,
+			"for chat", in.ChatID,
+		)
+		return errors.New("unexpected error")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 400 {
+		switch resp.StatusCode {
+		case 400:
+			return errors.New("invalid request parameters")
+		case 404:
+			return errors.New("unkown chat")
+		default:
+			return errors.New("unexpected error")
+		}
+	}
+	return nil
 }
 
 func (s *ScrapperAdapter) RegisterTGChat(
 	ctx context.Context, in dto.RegisterChat,
 ) error {
+	resp, err := s.Client.PostTgChatId(ctx, in.ChatID)
+	if err != nil {
+		slog.Error(
+			"can't make request RegisterTGChat",
+			"err", err,
+			"for chat", in.ChatID,
+		)
+		return errors.New("unexpected error")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 400 {
+		switch resp.StatusCode {
+		case 400:
+			return errors.New("invalid request parameters")
+		case 409:
+			return errors.New("chat was already registered")
+		default:
+			return errors.New("unexpected error")
+		}
+	}
+	return nil
 }
 
 func linkResponseToDTO(respBody scrapper.LinkResponse) dto.DeleteLinksResponse {
