@@ -10,8 +10,10 @@ import (
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/server"
 	oapibot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 )
 
 func main() {
@@ -25,7 +27,16 @@ func main() {
 	defer cancel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	botapp, err := bot.New(ctx, cfg, logger)
+
+	hc := http.Client{}
+	c, err := scrapper.NewClient("0.0.0.0:8001", scrapper.WithHTTPClient(&hc))
+	if err != nil {
+		logger.Error("can't create scrapper http client with", "err", err)
+		os.Exit(1)
+	}
+	sp := adapters.ScrapperAdapter{Client: c}
+
+	botapp, err := bot.New(ctx, cfg, logger, &sp)
 	if err != nil {
 		slog.Error("can't start bot", "with err", err)
 		os.Exit(1)

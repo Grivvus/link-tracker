@@ -7,6 +7,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/go-telegram/fsm"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 )
 
@@ -20,12 +21,16 @@ help - Выводит этот текст
 )
 
 type BotApplication struct {
-	Bot    *bot.Bot
-	fsm    *fsm.FSM
-	logger *slog.Logger
+	Bot          *bot.Bot
+	fsm          *fsm.FSM
+	logger       *slog.Logger
+	scrapperPort ports.ScrapperPort
 }
 
-func New(ctx context.Context, cfg infrastructure.BotConfig, logger *slog.Logger) (*BotApplication, error) {
+func New(
+	ctx context.Context, cfg infrastructure.BotConfig,
+	logger *slog.Logger, sp ports.ScrapperPort,
+) (*BotApplication, error) {
 	// so i can pass function-pointer as a default handler
 	app := &BotApplication{}
 	opts := []bot.Option{
@@ -41,6 +46,7 @@ func New(ctx context.Context, cfg infrastructure.BotConfig, logger *slog.Logger)
 	app.logger = logger
 	app.Bot = b
 	app.fsm = fsm
+	app.scrapperPort = sp
 
 	appInit(ctx, app)
 	return app, nil
