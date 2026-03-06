@@ -28,7 +28,7 @@ type BotApplication struct {
 }
 
 func New(
-	ctx context.Context, cfg infrastructure.BotConfig,
+	ctx context.Context, cfg infrastructure.Config,
 	logger *slog.Logger, sp ports.ScrapperPort,
 ) (*BotApplication, error) {
 	// so i can pass function-pointer as a default handler

@@ -42,7 +42,7 @@ func (s *ScrapperServer) DeleteLinks(
 		ChatID: params.TgChatId,
 		Link:   *removeData.Link,
 	}
-	respDTO, err := s.port.DeleteLinks(r.Context(), deleteDTO)
+	respDTO, err := s.port.DeleteLink(r.Context(), deleteDTO)
 	if err != nil {
 		s.log.Error(
 			"can't delete link",
@@ -53,7 +53,7 @@ func (s *ScrapperServer) DeleteLinks(
 		} else if errors.Is(err, ports.ErrNoChatWithThisID) || errors.Is(err, ports.ErrNoLink) {
 			http.Error(w, "no chat with this id or no such link", http.StatusNotFound)
 		} else {
-			http.Error(w, "unexpeted error", http.StatusInternalServerError)
+			http.Error(w, "unexpected error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -142,7 +142,7 @@ func (s *ScrapperServer) PostLinks(
 		Link:   *linkData.Link,
 		Tags:   *linkData.Tags,
 	}
-	addedLink, err := s.port.AddLinks(r.Context(), addLinkDTO)
+	addedLink, err := s.port.AddLink(r.Context(), addLinkDTO)
 	if err != nil {
 		s.log.Error(
 			"can't add new link",
@@ -156,7 +156,7 @@ func (s *ScrapperServer) PostLinks(
 		} else if errors.Is(err, ports.ErrLinkAlreadyTracked) {
 			http.Error(w, "link already tracked", http.StatusConflict)
 		} else {
-			http.Error(w, "unexpeted error", http.StatusInternalServerError)
+			http.Error(w, "unexpected error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -194,7 +194,7 @@ func (s *ScrapperServer) DeleteTgChatId(
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			s.log.Warn(
-				"unexpeted error type or value",
+				"unexpected error type or value",
 				"err", err,
 			)
 		}
@@ -220,7 +220,7 @@ func (s *ScrapperServer) PostTgChatId(
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			s.log.Warn(
-				"unexpeted error type or value",
+				"unexpected error type or value",
 				"err", err,
 			)
 		}

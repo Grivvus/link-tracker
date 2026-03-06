@@ -7,12 +7,12 @@ import (
 	"os"
 	"os/signal"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
 )
 
 func main() {
@@ -31,8 +31,8 @@ func main() {
 	}
 	_ = client
 
-	chatRepo := repository.NewChatRepository()
-	trackingRepo := repository.NewTrackingRepository()
+	chatRepo := storage.NewChatStorage()
+	trackingRepo := storage.NewTrackingStorage()
 	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, trackingRepo)
 	var server scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
