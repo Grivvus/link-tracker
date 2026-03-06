@@ -10,13 +10,13 @@ import (
 var ErrNoChatWithThisID = errors.New("can't find chat with this id")
 var ErrNoLink = errors.New("no link was found")
 var ErrChatAlreadyExist = errors.New("chat was already registered")
-var ErrBadParams = errors.New("recieved params didn't match specifiaction")
+var ErrBadParams = errors.New("received params didn't match specification")
 var ErrLinkAlreadyTracked = errors.New("this link is already tracked")
 
 type ScrapperPort interface {
-	DeleteLinks(ctx context.Context, in dto.DeleteLink) (dto.DeleteLinksResponse, error)
+	DeleteLink(ctx context.Context, in dto.DeleteLink) (dto.DeleteLinkResponse, error)
 	GetTrackedLinks(ctx context.Context, chatID int64) (dto.TrackedLinksResponse, error)
-	AddLinks(ctx context.Context, in dto.AddLink) (dto.AddLinksResponse, error)
+	AddLink(ctx context.Context, in dto.AddLink) (dto.AddLinkResponse, error)
 	DeleteTGChat(ctx context.Context, chatID int64) error
 	RegisterTGChat(ctx context.Context, chatID int64) error
 }

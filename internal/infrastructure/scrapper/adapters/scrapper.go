@@ -2,11 +2,15 @@ package adapters
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net/url"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
 type ScrapperAdapter struct {
@@ -27,9 +31,26 @@ func NewScrapperAdapter(
 	}
 }
 
-func (s *ScrapperAdapter) DeleteLinks(
+func (s *ScrapperAdapter) DeleteLink(
 	ctx context.Context, in dto.DeleteLink,
-) (dto.DeleteLinksResponse, error) {
+) (dto.DeleteLinkResponse, error) {
+	parsedURL, err := url.Parse(in.Link)
+	if err != nil {
+		return dto.DeleteLinkResponse{}, fmt.Errorf("%w: link is a not valid url", ports.ErrBadParams)
+	}
+	removed, err := s.trackingRepo.RemoveByURL(ctx, in.ChatID, parsedURL)
+	if err != nil {
+		if errors.Is(err, repository.ErrEntityNotFound) {
+			return dto.DeleteLinkResponse{}, ports.ErrNoLink
+		}
+		return dto.DeleteLinkResponse{}, errors.New("unexpected error")
+	}
+
+	return dto.DeleteLinkResponse{
+		ID:   removed.ID,
+		URL:  removed.URL.String(),
+		Tags: removed.Tags,
+	}, nil
 }
 
 func (s *ScrapperAdapter) GetTrackedLinks(
@@ -38,9 +59,12 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	if chatID < 0 {
 		return nil, ports.ErrBadParams
 	}
-	links, err := s.trackingRepo.FindByChat(chatID)
+	links, err := s.trackingRepo.FindByChat(ctx, chatID)
 	if err != nil {
-		return nil, ports.ErrNoChatWithThisID
+		if errors.Is(err, repository.ErrEntityNotFound) {
+			return nil, ports.ErrNoChatWithThisID
+		}
+		return nil, errors.New("unexpected error")
 	}
 
 	ret := make([]dto.TrackedLink, len(links))
@@ -55,9 +79,28 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 
 }
 
-func (s *ScrapperAdapter) AddLinks(
+func (s *ScrapperAdapter) AddLink(
 	ctx context.Context, in dto.AddLink,
-) (dto.AddLinksResponse, error) {
+) (dto.AddLinkResponse, error) {
+	savableLink, err := domain.NewTracking(in.ChatID, in.Link, in.Tags)
+	if err != nil {
+		return dto.AddLinkResponse{}, fmt.Errorf(
+			"%w: link isn't valid url", ports.ErrBadParams,
+		)
+	}
+	saved, err := s.trackingRepo.Save(ctx, savableLink)
+	if err != nil {
+		if errors.Is(err, repository.ErrEntityAlreadyExists) {
+			return dto.AddLinkResponse{}, ports.ErrLinkAlreadyTracked
+		}
+
+		return dto.AddLinkResponse{}, errors.New("unexpected error")
+	}
+	return dto.AddLinkResponse{
+		ID:   saved.ID,
+		URL:  saved.URL.String(),
+		Tags: saved.Tags,
+	}, nil
 }
 
 func (s *ScrapperAdapter) DeleteTGChat(
@@ -68,7 +111,10 @@ func (s *ScrapperAdapter) DeleteTGChat(
 	}
 	err := s.chatRepo.Delete(chatID)
 	if err != nil {
-		return ports.ErrNoChatWithThisID
+		if errors.Is(err, repository.ErrEntityNotFound) {
+			return ports.ErrNoChatWithThisID
+		}
+		return errors.New("unexpected error")
 	}
 	return nil
 }
@@ -81,7 +127,10 @@ func (s *ScrapperAdapter) RegisterTGChat(
 	}
 	err := s.chatRepo.Register(chatID)
 	if err != nil {
-		return ports.ErrChatAlreadyExist
+		if errors.Is(err, repository.ErrEntityAlreadyExists) {
+			return ports.ErrChatAlreadyExist
+		}
+		return errors.New("unexpected error")
 	}
 	return nil
 }

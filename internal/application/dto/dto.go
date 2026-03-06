@@ -12,7 +12,7 @@ type DeleteLink struct {
 	Link   string
 }
 
-type DeleteLinksResponse = TrackedLink
+type DeleteLinkResponse = TrackedLink
 
 type TrackedLinksResponse = []TrackedLink
 
@@ -28,4 +28,4 @@ type AddLink struct {
 	Tags   []string
 }
 
-type AddLinksResponse = TrackedLink
+type AddLinkResponse = TrackedLink

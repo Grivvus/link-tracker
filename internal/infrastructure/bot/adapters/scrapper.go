@@ -24,32 +24,32 @@ func NewScrapperPort(client scrapper.ClientInterface, logger *slog.Logger) ports
 	}
 }
 
-func (s *ScrapperAdapter) DeleteLinks(
+func (s *ScrapperAdapter) DeleteLink(
 	ctx context.Context, in dto.DeleteLink,
-) (dto.DeleteLinksResponse, error) {
-	var params *scrapper.DeleteLinksParams
+) (dto.DeleteLinkResponse, error) {
+	var params scrapper.DeleteLinksParams
 	params.TgChatId = in.ChatID
 	var body = scrapper.DeleteLinksJSONRequestBody{
 		Link: &in.Link,
 	}
-	resp, err := s.client.DeleteLinks(ctx, params, body)
+	resp, err := s.client.DeleteLinks(ctx, &params, body)
 	if err != nil {
 		s.log.Error(
 			"can't make request DeleteLinks",
 			"err", err,
 			"for chat", in.ChatID,
 		)
-		return dto.DeleteLinksResponse{}, fmt.Errorf("can't make a DeleteLinks request: %w", err)
+		return dto.DeleteLinkResponse{}, fmt.Errorf("can't make a DeleteLinks request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.DeleteLinksResponse{}, errors.New("wrong request parameters")
+			return dto.DeleteLinkResponse{}, errors.New("wrong request parameters")
 		case 404:
-			return dto.DeleteLinksResponse{}, errors.New("unkown chat or link")
+			return dto.DeleteLinkResponse{}, errors.New("unknown chat or link")
 		default:
-			return dto.DeleteLinksResponse{}, errors.New("unexpected error")
+			return dto.DeleteLinkResponse{}, errors.New("unexpected error")
 		}
 	}
 
@@ -61,7 +61,7 @@ func (s *ScrapperAdapter) DeleteLinks(
 			"err", err,
 			"for chat", in.ChatID,
 		)
-		return dto.DeleteLinksResponse{}, errors.New("can't get answer from server")
+		return dto.DeleteLinkResponse{}, errors.New("can't get answer from server")
 	}
 
 	out := linkResponseToDTO(respBody)
@@ -72,9 +72,9 @@ func (s *ScrapperAdapter) DeleteLinks(
 func (s *ScrapperAdapter) GetTrackedLinks(
 	ctx context.Context, chatID int64,
 ) (dto.TrackedLinksResponse, error) {
-	var params *scrapper.GetLinksParams
+	var params scrapper.GetLinksParams
 	params.TgChatId = chatID
-	resp, err := s.client.GetLinks(ctx, params)
+	resp, err := s.client.GetLinks(ctx, &params)
 	if err != nil {
 		s.log.Error(
 			"can't make request GetLinks",
@@ -89,7 +89,7 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 		case 400:
 			return dto.TrackedLinksResponse{}, errors.New("wrong request parameters")
 		case 404:
-			return dto.TrackedLinksResponse{}, errors.New("unkown chat")
+			return dto.TrackedLinksResponse{}, errors.New("unknown chat")
 		default:
 			return dto.TrackedLinksResponse{}, errors.New("unexpected error")
 		}
@@ -121,9 +121,9 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	return out, nil
 }
 
-func (s *ScrapperAdapter) AddLinks(
+func (s *ScrapperAdapter) AddLink(
 	ctx context.Context, in dto.AddLink,
-) (dto.AddLinksResponse, error) {
+) (dto.AddLinkResponse, error) {
 	var params scrapper.PostLinksParams
 	var body scrapper.PostLinksJSONRequestBody
 	resp, err := s.client.PostLinks(ctx, &params, body)
@@ -133,19 +133,19 @@ func (s *ScrapperAdapter) AddLinks(
 			"err", err,
 			"for chat", in.ChatID,
 		)
-		return dto.AddLinksResponse{}, errors.New("unexpected error")
+		return dto.AddLinkResponse{}, errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.AddLinksResponse{}, errors.New("wrong request parameters")
+			return dto.AddLinkResponse{}, errors.New("wrong request parameters")
 		case 404:
-			return dto.AddLinksResponse{}, errors.New("unkown chat")
+			return dto.AddLinkResponse{}, errors.New("unkown chat")
 		case 409:
-			return dto.AddLinksResponse{}, errors.New("link was already tracked")
+			return dto.AddLinkResponse{}, errors.New("link was already tracked")
 		default:
-			return dto.AddLinksResponse{}, errors.New("unexpected error")
+			return dto.AddLinkResponse{}, errors.New("unexpected error")
 		}
 	}
 
@@ -157,7 +157,7 @@ func (s *ScrapperAdapter) AddLinks(
 			"err", err,
 			"for chat", in.ChatID,
 		)
-		return dto.AddLinksResponse{}, errors.New("unexpected error")
+		return dto.AddLinkResponse{}, errors.New("unexpected error")
 	}
 
 	return linkResponseToDTO(respBody), nil
@@ -215,8 +215,8 @@ func (s *ScrapperAdapter) RegisterTGChat(
 	return nil
 }
 
-func linkResponseToDTO(respBody scrapper.LinkResponse) dto.DeleteLinksResponse {
-	var out dto.DeleteLinksResponse
+func linkResponseToDTO(respBody scrapper.LinkResponse) dto.DeleteLinkResponse {
+	var out dto.DeleteLinkResponse
 	if respBody.Id == nil || respBody.Url == nil {
 		// assertion
 		panic("ID and URL is required")
