@@ -1,0 +1,15 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    ports:
+      - 8000:8000
+    restart: no
+  scrapper:
+    build:
+      context: .
+      dockerfile: Dockerfile.scrapper
+    ports:
+      - 8001:8001
+    restart: no

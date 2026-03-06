@@ -1,0 +1,20 @@
+FROM golang:1.26 AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN GOOS=linux go build -o bot ./cmd/bot/
+
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+COPY --from=builder /app/bot /usr/bin/bot
+COPY --from=builder /app/.env /.env
+RUN chmod +x /usr/bin/bot
+
+ENTRYPOINT ["/usr/bin/bot"]
