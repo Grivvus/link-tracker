@@ -173,10 +173,6 @@ components:
           type: array
           items:
             type: string
-        filters:
-          type: array
-          items:
-            type: string
     ApiErrorResponse:
       type: object
       properties:
@@ -199,10 +195,6 @@ components:
           type: string
           format: uri
         tags:
-          type: array
-          items:
-            type: string
-        filters:
           type: array
           items:
             type: string

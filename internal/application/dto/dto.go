@@ -8,34 +8,24 @@ type LinkUpdate struct {
 }
 
 type DeleteLink struct {
-	Link string
+	ChatID int64
+	Link   string
 }
 
 type DeleteLinksResponse = TrackedLink
 
-type TrackedLinksResponse struct {
-	Links []TrackedLink
-}
+type TrackedLinksResponse = []TrackedLink
 
 type TrackedLink struct {
-	ID      int64
-	URL     string
-	Tags    []string
-	Filters []string
+	ID   int64
+	URL  string
+	Tags []string
 }
 
 type AddLink struct {
-	Link    string
-	Tags    []string
-	Filters []string
+	ChatID int64
+	Link   string
+	Tags   []string
 }
 
 type AddLinksResponse = TrackedLink
-
-type RegisterChat struct {
-	ChatID int64
-}
-
-type DeleteChat struct {
-	ChatID int64
-}

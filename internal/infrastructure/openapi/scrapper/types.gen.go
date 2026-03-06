@@ -5,9 +5,8 @@ package scrapper
 
 // AddLinkRequest defines model for AddLinkRequest.
 type AddLinkRequest struct {
-	Filters *[]string `json:"filters,omitempty"`
-	Link    *string   `json:"link,omitempty"`
-	Tags    *[]string `json:"tags,omitempty"`
+	Link *string   `json:"link,omitempty"`
+	Tags *[]string `json:"tags,omitempty"`
 }
 
 // ApiErrorResponse defines model for ApiErrorResponse.
@@ -21,10 +20,9 @@ type ApiErrorResponse struct {
 
 // LinkResponse defines model for LinkResponse.
 type LinkResponse struct {
-	Filters *[]string `json:"filters,omitempty"`
-	Id      *int64    `json:"id,omitempty"`
-	Tags    *[]string `json:"tags,omitempty"`
-	Url     *string   `json:"url,omitempty"`
+	Id   *int64    `json:"id,omitempty"`
+	Tags *[]string `json:"tags,omitempty"`
+	Url  *string   `json:"url,omitempty"`
 }
 
 // ListLinksResponse defines model for ListLinksResponse.
