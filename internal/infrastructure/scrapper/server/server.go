@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 )
@@ -25,6 +26,52 @@ func NewScrapperServer(l *slog.Logger, scrapperPort ports.ScrapperPort) *Scrappe
 func (s *ScrapperServer) DeleteLinks(
 	w http.ResponseWriter, r *http.Request, params scrapper.DeleteLinksParams,
 ) {
+	var removeData scrapper.RemoveLinkRequest
+	err := json.NewDecoder(r.Body).Decode(&removeData)
+	if err != nil {
+		s.log.Error("can't decode json body", "err", err)
+		http.Error(w, "invalid request parameters", http.StatusBadRequest)
+		return
+	}
+	if removeData.Link == nil {
+		s.log.Error("RemoveLinkRequest.Link shouldn't be nil")
+		http.Error(w, "invalid request parameters", http.StatusBadRequest)
+		return
+	}
+	deleteDTO := dto.DeleteLink{
+		ChatID: params.TgChatId,
+		Link:   *removeData.Link,
+	}
+	respDTO, err := s.port.DeleteLinks(r.Context(), deleteDTO)
+	if err != nil {
+		s.log.Error(
+			"can't delete link",
+			"err", err, "for chat", params.TgChatId,
+		)
+		if errors.Is(err, ports.ErrBadParams) {
+			http.Error(w, "invalid request parameters", http.StatusBadRequest)
+		} else if errors.Is(err, ports.ErrNoChatWithThisID) || errors.Is(err, ports.ErrNoLink) {
+			http.Error(w, "no chat with this id or no such link", http.StatusNotFound)
+		} else {
+			http.Error(w, "unexpeted error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	var resp = scrapper.LinkResponse{
+		Id:   &respDTO.ID,
+		Url:  &respDTO.URL,
+		Tags: &respDTO.Tags,
+	}
+	err = json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		s.log.Error(
+			"can't encode response",
+			"err", err,
+			"for chat", params.TgChatId,
+		)
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *ScrapperServer) GetLinks(
@@ -33,6 +80,10 @@ func (s *ScrapperServer) GetLinks(
 	chatID := params.TgChatId
 	links, err := s.port.GetTrackedLinks(r.Context(), chatID)
 	if err != nil {
+		s.log.Error(
+			"can't get links",
+			"err", err, "for chat", params.TgChatId,
+		)
 		if errors.Is(err, ports.ErrBadParams) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
@@ -58,7 +109,7 @@ func (s *ScrapperServer) GetLinks(
 
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
-		slog.Error(
+		s.log.Error(
 			"can't encode response",
 			"err", err,
 		)
@@ -68,6 +119,62 @@ func (s *ScrapperServer) GetLinks(
 func (s *ScrapperServer) PostLinks(
 	w http.ResponseWriter, r *http.Request, params scrapper.PostLinksParams,
 ) {
+	var linkData scrapper.AddLinkRequest
+	err := json.NewDecoder(r.Body).Decode(&linkData)
+	if err != nil {
+		s.log.Error("can't decode json body", "err", err)
+		http.Error(w, "invalid request parameters", http.StatusBadRequest)
+		return
+	}
+	if linkData.Link == nil {
+		s.log.Error("AddLinkRequest.Link shouldn't be nil")
+		http.Error(w, "invalid request parameters", http.StatusBadRequest)
+		return
+	}
+	if linkData.Tags == nil {
+		s.log.Warn("AddLinkRequest.Tags shouldn't be nil")
+		tgs := make([]string, 0)
+		linkData.Tags = &tgs
+	}
+
+	addLinkDTO := dto.AddLink{
+		ChatID: params.TgChatId,
+		Link:   *linkData.Link,
+		Tags:   *linkData.Tags,
+	}
+	addedLink, err := s.port.AddLinks(r.Context(), addLinkDTO)
+	if err != nil {
+		s.log.Error(
+			"can't add new link",
+			"err", err,
+			"for chat", params.TgChatId,
+		)
+		if errors.Is(err, ports.ErrBadParams) {
+			http.Error(w, "invalid request parameters", http.StatusBadRequest)
+		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+			http.Error(w, "no such chat", http.StatusNotFound)
+		} else if errors.Is(err, ports.ErrLinkAlreadyTracked) {
+			http.Error(w, "link already tracked", http.StatusConflict)
+		} else {
+			http.Error(w, "unexpeted error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	resp := scrapper.LinkResponse{
+		Id:   &addedLink.ID,
+		Url:  &addedLink.URL,
+		Tags: &addedLink.Tags,
+	}
+	err = json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		s.log.Error(
+			"can't encode response",
+			"err", err,
+			"for chat", params.TgChatId,
+		)
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *ScrapperServer) DeleteTgChatId(
@@ -75,7 +182,7 @@ func (s *ScrapperServer) DeleteTgChatId(
 ) {
 	err := s.port.DeleteTGChat(r.Context(), id)
 	if err != nil {
-		slog.Error(
+		s.log.Error(
 			"can't delete chat",
 			"err", err,
 			"for chat", id,

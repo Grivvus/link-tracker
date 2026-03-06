@@ -8,8 +8,10 @@ import (
 )
 
 var ErrNoChatWithThisID = errors.New("can't find chat with this id")
+var ErrNoLink = errors.New("no link was found")
 var ErrChatAlreadyExist = errors.New("chat was already registered")
 var ErrBadParams = errors.New("recieved params didn't match specifiaction")
+var ErrLinkAlreadyTracked = errors.New("this link is already tracked")
 
 type ScrapperPort interface {
 	DeleteLinks(ctx context.Context, in dto.DeleteLink) (dto.DeleteLinksResponse, error)

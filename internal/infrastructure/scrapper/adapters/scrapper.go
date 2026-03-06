@@ -46,10 +46,9 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	ret := make([]dto.TrackedLink, len(links))
 	for i, link := range links {
 		ret[i] = dto.TrackedLink{
-			ID:      link.ID,
-			URL:     link.URL.String(),
-			Tags:    link.Tags,
-			Filters: link.Filters,
+			ID:   link.ID,
+			URL:  link.URL.String(),
+			Tags: link.Tags,
 		}
 	}
 	return ret, nil
