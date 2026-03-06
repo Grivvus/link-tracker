@@ -12,19 +12,19 @@ var (
 	ErrCantParseConfig = errors.New("can't process config")
 )
 
-type BotConfig struct {
-	Token string `envconfig:"TOKEN" required:"true"`
-	Host  string `envconfig:"HOST" required:"true"`
-	Port  uint   `envconfig:"PORT" required:"true"`
+type Config struct {
+	Token       string `envconfig:"TOKEN" required:"true"`
+	BotURL      string `envconfig:"BOT_URL" required:"true"`
+	ScrapperURL string `envconfig:"SCRAPPER_URL" required:"true"`
 }
 
-func LoadBotConfig() (BotConfig, error) {
-	var cfg BotConfig
+func LoadConfig() (Config, error) {
+	var cfg Config
 	err := godotenv.Load(".env")
 	if err != nil {
 		return cfg, ErrCantLoadEnvFile
 	}
-	err = envconfig.Process("bot", &cfg)
+	err = envconfig.Process("", &cfg)
 	if err != nil {
 		return cfg, ErrCantParseConfig
 	}

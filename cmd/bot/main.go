@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,7 +16,7 @@ import (
 )
 
 func main() {
-	cfg, err := infrastructure.LoadBotConfig()
+	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
@@ -29,14 +28,14 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	hc := http.Client{}
-	c, err := scrapper.NewClient("0.0.0.0:8001", scrapper.WithHTTPClient(&hc))
+	c, err := scrapper.NewClient(cfg.ScrapperURL, scrapper.WithHTTPClient(&hc))
 	if err != nil {
 		logger.Error("can't create scrapper http client with", "err", err)
 		os.Exit(1)
 	}
-	sp := adapters.ScrapperAdapter{Client: c}
+	sp := adapters.NewScrapperPort(c, logger)
 
-	botapp, err := bot.New(ctx, cfg, logger, &sp)
+	botapp, err := bot.New(ctx, cfg, logger, sp)
 	if err != nil {
 		slog.Error("can't start bot", "with err", err)
 		os.Exit(1)
@@ -45,7 +44,7 @@ func main() {
 	mux := http.NewServeMux()
 	h := oapibot.HandlerFromMux(serv, mux)
 	s := http.Server{
-		Addr:    fmt.Sprintf("%v:%v", cfg.Host, cfg.Port),
+		Addr:    cfg.BotURL,
 		Handler: h,
 	}
 

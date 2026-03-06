@@ -5,18 +5,32 @@ import (
 )
 
 type Tracking struct {
-	ChatID int64
-	URL    *url.URL
-	Tags   []string
+	ID      int64
+	ChatID  int64
+	URL     *url.URL
+	Tags    []string
+	Filters []string
 }
 
-func NewTracking(rawURL string, tags []string) (Tracking, error) {
+func NewTracking(
+	chatID int64, rawURL string,
+	tags []string, filters []string,
+) (Tracking, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return Tracking{}, err
+		return Tracking{}, NewErrBadURL(rawURL)
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	if filters == nil {
+		filters = []string{}
 	}
 	return Tracking{
-		URL:  parsed,
-		Tags: tags,
+		ID:      -1,
+		ChatID:  chatID,
+		URL:     parsed,
+		Tags:    tags,
+		Filters: filters,
 	}, nil
 }

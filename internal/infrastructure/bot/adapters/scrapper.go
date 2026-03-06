@@ -8,28 +8,36 @@ import (
 	"log/slog"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 )
 
 type ScrapperAdapter struct {
-	Client scrapper.ClientInterface
+	client scrapper.ClientInterface
 	log    *slog.Logger
 }
 
+func NewScrapperPort(client scrapper.ClientInterface, logger *slog.Logger) ports.ScrapperPort {
+	return &ScrapperAdapter{
+		client: client,
+		log:    logger,
+	}
+}
+
 func (s *ScrapperAdapter) DeleteLinks(
-	ctx context.Context, chatID int64, in dto.DeleteLink,
+	ctx context.Context, in dto.DeleteLink,
 ) (dto.DeleteLinksResponse, error) {
 	var params *scrapper.DeleteLinksParams
-	params.TgChatId = chatID
+	params.TgChatId = in.ChatID
 	var body = scrapper.DeleteLinksJSONRequestBody{
 		Link: &in.Link,
 	}
-	resp, err := s.Client.DeleteLinks(ctx, params, body)
+	resp, err := s.client.DeleteLinks(ctx, params, body)
 	if err != nil {
 		s.log.Error(
 			"can't make request DeleteLinks",
 			"err", err,
-			"for chat", chatID,
+			"for chat", in.ChatID,
 		)
 		return dto.DeleteLinksResponse{}, fmt.Errorf("can't make a DeleteLinks request: %w", err)
 	}
@@ -51,7 +59,7 @@ func (s *ScrapperAdapter) DeleteLinks(
 		s.log.Error(
 			"can't decode response from DeleteLinks request",
 			"err", err,
-			"for chat", chatID,
+			"for chat", in.ChatID,
 		)
 		return dto.DeleteLinksResponse{}, errors.New("can't get answer from server")
 	}
@@ -66,7 +74,7 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 ) (dto.TrackedLinksResponse, error) {
 	var params *scrapper.GetLinksParams
 	params.TgChatId = chatID
-	resp, err := s.Client.GetLinks(ctx, params)
+	resp, err := s.client.GetLinks(ctx, params)
 	if err != nil {
 		s.log.Error(
 			"can't make request GetLinks",
@@ -101,29 +109,29 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	var out dto.TrackedLinksResponse
 	if respBody.Links == nil {
 		s.log.Warn("ListLinksResponse.Links shouldn't be null", "for chat", chatID)
-		out.Links = []dto.TrackedLink{}
+		out = []dto.TrackedLink{}
 	} else {
 		links := *respBody.Links
-		out.Links = make([]dto.TrackedLink, 0, len(links))
+		out = make([]dto.TrackedLink, 0, len(links))
 		for _, link := range links {
 			dtoLink := linkResponseToDTO(link)
-			out.Links = append(out.Links, dtoLink)
+			out = append(out, dtoLink)
 		}
 	}
 	return out, nil
 }
 
 func (s *ScrapperAdapter) AddLinks(
-	ctx context.Context, chatID int64, in dto.AddLink,
+	ctx context.Context, in dto.AddLink,
 ) (dto.AddLinksResponse, error) {
 	var params scrapper.PostLinksParams
 	var body scrapper.PostLinksJSONRequestBody
-	resp, err := s.Client.PostLinks(ctx, &params, body)
+	resp, err := s.client.PostLinks(ctx, &params, body)
 	if err != nil {
 		s.log.Error(
 			"can't make PostLinks request",
 			"err", err,
-			"for chat", chatID,
+			"for chat", in.ChatID,
 		)
 		return dto.AddLinksResponse{}, errors.New("unexpected error")
 	}
@@ -147,7 +155,7 @@ func (s *ScrapperAdapter) AddLinks(
 		s.log.Error(
 			"ScrapperAdapter, AddLinks, can't decode response",
 			"err", err,
-			"for chat", chatID,
+			"for chat", in.ChatID,
 		)
 		return dto.AddLinksResponse{}, errors.New("unexpected error")
 	}
@@ -156,14 +164,14 @@ func (s *ScrapperAdapter) AddLinks(
 }
 
 func (s *ScrapperAdapter) DeleteTGChat(
-	ctx context.Context, in dto.DeleteChat,
+	ctx context.Context, chatID int64,
 ) error {
-	resp, err := s.Client.DeleteTgChatId(ctx, in.ChatID)
+	resp, err := s.client.DeleteTgChatId(ctx, chatID)
 	if err != nil {
 		slog.Error(
 			"can't make request DeleteTGChat",
 			"err", err,
-			"for chat", in.ChatID,
+			"for chat", chatID,
 		)
 		return errors.New("unexpected error")
 	}
@@ -182,14 +190,14 @@ func (s *ScrapperAdapter) DeleteTGChat(
 }
 
 func (s *ScrapperAdapter) RegisterTGChat(
-	ctx context.Context, in dto.RegisterChat,
+	ctx context.Context, chatID int64,
 ) error {
-	resp, err := s.Client.PostTgChatId(ctx, in.ChatID)
+	resp, err := s.client.PostTgChatId(ctx, chatID)
 	if err != nil {
 		slog.Error(
 			"can't make request RegisterTGChat",
 			"err", err,
-			"for chat", in.ChatID,
+			"for chat", chatID,
 		)
 		return errors.New("unexpected error")
 	}
@@ -219,11 +227,6 @@ func linkResponseToDTO(respBody scrapper.LinkResponse) dto.DeleteLinksResponse {
 		out.Tags = []string{}
 	} else {
 		out.Tags = *respBody.Tags
-	}
-	if respBody.Filters == nil {
-		out.Filters = []string{}
-	} else {
-		out.Filters = *respBody.Filters
 	}
 	return out
 }
