@@ -58,6 +58,6 @@ func AskTagsCallback(f *fsm.FSM, args ...any) {
 	slog.Info("AskTags callback was called for", "chat", chatID)
 	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   "Теги добавлены. Ссылка сконфигурирована и добавлена",
+		Text:   "Теги добавлены. Ссылка сконфигурирована и добавлена. Что бы подтвердить, введите 'Ok'",
 	})
 }

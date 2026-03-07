@@ -16,6 +16,7 @@ var (
 type Config struct {
 	BotToken    string `envconfig:"BOT_TOKEN" required:"true"`
 	BotURL      string `envconfig:"BOT_URL" required:"true"`
+	ServerURL   string `envconfig:"SERVER_URL" required:"true"`
 	ScrapperURL string `envconfig:"SCRAPPER_URL" required:"true"`
 }
 

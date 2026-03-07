@@ -42,7 +42,7 @@ func main() {
 	mux := http.NewServeMux()
 	h := scrapper.HandlerFromMux(server, mux)
 	httpServer := http.Server{
-		Addr:    cfg.ScrapperURL,
+		Addr:    cfg.ServerURL,
 		Handler: h,
 	}
 

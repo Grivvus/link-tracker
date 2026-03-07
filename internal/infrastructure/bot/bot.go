@@ -87,6 +87,15 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 	chatID := update.Message.Chat.ID
 	switch bapp.fsm.Current(userID) {
 	case Default:
+		err := bapp.dialogStorage.StartFilling(chatID)
+		if err != nil {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "Не могу начать добавление ссылки, попробуйте позже",
+			})
+			bapp.fsm.Reset(userID)
+			return
+		}
 		bapp.fsm.Transition(userID, Start, ctx, b, chatID, userID)
 	default:
 		bapp.logger.Error(
@@ -103,6 +112,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 }
 
 func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	bapp.logger.Info("InputHandler was called for", "chat", update.Message.Chat.ID)
 	userID := update.Message.From.ID
 	chatID := update.Message.Chat.ID
 	switch bapp.fsm.Current(userID) {
@@ -166,6 +176,10 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			bapp.fsm.Reset(userID)
 			return
 		}
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "Ссылка была успешно сохранена",
+		})
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
 	default:
 		bapp.logger.Error(
@@ -173,7 +187,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			"state", bapp.fsm.Current(userID),
 			"user", userID,
 		)
-		bapp.HelpHandler(ctx, b, update)
+		bapp.DefaultHandler(ctx, b, update)
 	}
 }
 
@@ -236,10 +250,6 @@ func appInit(ctx context.Context, app *BotApplication) {
 		bot.MatchTypeCommand, app.TrackHandler,
 	)
 	app.Bot.RegisterHandler(
-		bot.HandlerTypeMessageText, "",
-		bot.MatchTypeContains, app.InputHandler,
-	)
-	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "cancel",
 		bot.MatchTypeCommand, app.CancelHandler,
 	)
@@ -250,5 +260,9 @@ func appInit(ctx context.Context, app *BotApplication) {
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "list",
 		bot.MatchTypeCommand, app.ListHandler,
+	)
+	app.Bot.RegisterHandler(
+		bot.HandlerTypeMessageText, "",
+		bot.MatchTypeContains, app.InputHandler,
 	)
 }

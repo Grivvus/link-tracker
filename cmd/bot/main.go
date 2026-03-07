@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -31,7 +32,7 @@ func main() {
 	defer cancel()
 
 	hc := http.Client{}
-	c, err := scrapper.NewClient(cfg.ScrapperURL, scrapper.WithHTTPClient(&hc))
+	c, err := scrapper.NewClient(fmt.Sprintf("http://%s/", cfg.ScrapperURL), scrapper.WithHTTPClient(&hc))
 	if err != nil {
 		logger.Error("can't create scrapper http client with", "err", err)
 		os.Exit(1)
@@ -47,7 +48,7 @@ func main() {
 	mux := http.NewServeMux()
 	h := oapibot.HandlerFromMux(serv, mux)
 	s := http.Server{
-		Addr:    cfg.BotURL,
+		Addr:    cfg.ServerURL,
 		Handler: h,
 	}
 
