@@ -17,7 +17,9 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewTextHandler(
+		os.Stdout, &slog.HandlerOptions{AddSource: true},
+	))
 
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {

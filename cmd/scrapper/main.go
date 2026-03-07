@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,7 +17,9 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewTextHandler(
+		os.Stdout, &slog.HandlerOptions{AddSource: true},
+	))
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
 		logger.Error("can't load config", "err", err)
@@ -29,7 +32,8 @@ func main() {
 		logger.Error("can't init bot http client", "err", err)
 		os.Exit(1)
 	}
-	_ = client
+	botPort := adapters.NewBotAdapter(logger, client)
+	_ = botPort // needed, when i implement notifier
 
 	chatRepo := storage.NewChatStorage()
 	trackingRepo := storage.NewTrackingStorage()
@@ -46,7 +50,8 @@ func main() {
 	defer cancel()
 
 	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Info("server has been started on", "addr", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server exit with error", "err", err)
 		}
 	}()

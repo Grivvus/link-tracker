@@ -124,8 +124,11 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 func (s *ScrapperAdapter) AddLink(
 	ctx context.Context, in dto.AddLink,
 ) (dto.AddLinkResponse, error) {
-	var params scrapper.PostLinksParams
-	var body scrapper.PostLinksJSONRequestBody
+	params := scrapper.PostLinksParams{TgChatId: in.ChatID}
+	body := scrapper.PostLinksJSONRequestBody{
+		Link: &in.Link,
+		Tags: &in.Tags,
+	}
 	resp, err := s.client.PostLinks(ctx, &params, body)
 	if err != nil {
 		s.log.Error(

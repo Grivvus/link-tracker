@@ -19,7 +19,7 @@ func New(l *slog.Logger) *BotServer {
 }
 
 func (serv *BotServer) PostUpdates(w http.ResponseWriter, r *http.Request) {
-	serv.logger.Info("PostUpdates called")
+	serv.logger.Info("PostUpdates handler called")
 	var updates bot.PostUpdatesJSONRequestBody
 	err := json.NewDecoder(r.Body).Decode(&updates)
 	if err != nil {

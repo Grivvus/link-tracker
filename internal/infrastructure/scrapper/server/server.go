@@ -26,6 +26,7 @@ func NewScrapperServer(l *slog.Logger, scrapperPort ports.ScrapperPort) *Scrappe
 func (s *ScrapperServer) DeleteLinks(
 	w http.ResponseWriter, r *http.Request, params scrapper.DeleteLinksParams,
 ) {
+	s.log.Info("DeleteLinks handler called", "for chat", params.TgChatId)
 	var removeData scrapper.RemoveLinkRequest
 	err := json.NewDecoder(r.Body).Decode(&removeData)
 	if err != nil {
@@ -77,6 +78,7 @@ func (s *ScrapperServer) DeleteLinks(
 func (s *ScrapperServer) GetLinks(
 	w http.ResponseWriter, r *http.Request, params scrapper.GetLinksParams,
 ) {
+	s.log.Info("GetLinks handler called", "for chat", params.TgChatId)
 	chatID := params.TgChatId
 	links, err := s.port.GetTrackedLinks(r.Context(), chatID)
 	if err != nil {
@@ -119,6 +121,7 @@ func (s *ScrapperServer) GetLinks(
 func (s *ScrapperServer) PostLinks(
 	w http.ResponseWriter, r *http.Request, params scrapper.PostLinksParams,
 ) {
+	s.log.Info("PostLinks handler called", "for chat", params.TgChatId)
 	var linkData scrapper.AddLinkRequest
 	err := json.NewDecoder(r.Body).Decode(&linkData)
 	if err != nil {
@@ -180,6 +183,7 @@ func (s *ScrapperServer) PostLinks(
 func (s *ScrapperServer) DeleteTgChatId(
 	w http.ResponseWriter, r *http.Request, id int64,
 ) {
+	s.log.Info("DeleteTgChatId handler called", "for chat", id)
 	err := s.port.DeleteTGChat(r.Context(), id)
 	if err != nil {
 		s.log.Error(
@@ -206,6 +210,7 @@ func (s *ScrapperServer) DeleteTgChatId(
 func (s *ScrapperServer) PostTgChatId(
 	w http.ResponseWriter, r *http.Request, id int64,
 ) {
+	s.log.Info("PostTgChatId handler called", "for chat", id)
 	err := s.port.RegisterTGChat(r.Context(), id)
 	if err != nil {
 		s.log.Error(

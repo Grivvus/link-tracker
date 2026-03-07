@@ -3,10 +3,13 @@ package bot
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/go-telegram/fsm"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/repository"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 )
@@ -21,10 +24,11 @@ help - Выводит этот текст
 )
 
 type BotApplication struct {
-	Bot          *bot.Bot
-	fsm          *fsm.FSM
-	logger       *slog.Logger
-	scrapperPort ports.ScrapperPort
+	Bot           *bot.Bot
+	fsm           *fsm.FSM
+	dialogStorage repository.DialogDraftsRepository
+	logger        *slog.Logger
+	scrapperPort  ports.ScrapperPort
 }
 
 func New(
@@ -47,7 +51,7 @@ func New(
 	app.Bot = b
 	app.fsm = fsm
 	app.scrapperPort = sp
-
+	app.dialogStorage = newDialogDraftsStorage(logger)
 	appInit(ctx, app)
 	return app, nil
 }
@@ -83,34 +87,85 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 	chatID := update.Message.Chat.ID
 	switch bapp.fsm.Current(userID) {
 	case Default:
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "Default state",
-		})
 		bapp.fsm.Transition(userID, Start, ctx, b, chatID, userID)
-	case Start:
+	default:
+		bapp.logger.Error(
+			"TrackHandler. Illegal state of fsm",
+			"state", bapp.fsm.Current(userID),
+			"user", userID,
+		)
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Start state",
+			Text:   "Неправильное использование команды /track, ввод ссылки уже был начат",
 		})
+		bapp.fsm.Reset(userID)
+	}
+}
+
+func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := update.Message.From.ID
+	chatID := update.Message.Chat.ID
+	switch bapp.fsm.Current(userID) {
+	case Start:
+		rawURL := update.Message.Text
+		err := bapp.dialogStorage.AddURL(chatID, rawURL)
+		if err != nil {
+			bapp.logger.Error(
+				"Failed to add URL",
+				"chat", chatID, "url", rawURL, "err", err,
+			)
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "Не получилсоь добавить ссылку, попробуйте начать сначала",
+			})
+			bapp.fsm.Reset(userID)
+			return
+		}
 		bapp.fsm.Transition(userID, AskLink, ctx, b, chatID, userID)
 	case AskLink:
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "AskLink state",
-		})
+		tags := update.Message.Text
+		var tagsSplited []string
+		if tags == "" {
+			tagsSplited = make([]string, 0)
+		} else {
+			tagsSplited = strings.Split(tags, ",")
+		}
+		err := bapp.dialogStorage.AddTags(chatID, tagsSplited)
+		if err != nil {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "Не получилось добавить теги, проверьте формат и повторите их ввод",
+			})
+			return
+		}
 		bapp.fsm.Transition(userID, AskTags, ctx, b, chatID, userID)
 	case AskTags:
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		completedLink, err := bapp.dialogStorage.GetFilledTracking(chatID)
+		if err != nil {
+			bapp.logger.Error(
+				"Failed to get filled tracking",
+				"chat", chatID, "err", err,
+			)
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "что-то пошло не так, введите ссылку заново",
+			})
+			bapp.fsm.Reset(userID)
+			return
+		}
+		_, err = bapp.scrapperPort.AddLink(ctx, dto.AddLink{
 			ChatID: chatID,
-			Text:   "AskTags state",
+			Link:   completedLink.URL.String(),
+			Tags:   completedLink.Tags,
 		})
-		bapp.fsm.Transition(userID, Finish, ctx, b, chatID, userID)
-	case Finish:
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "Finish state",
-		})
+		if err != nil {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "не получилось сохранить добавленную ссылку, попробуйте позже",
+			})
+			bapp.fsm.Reset(userID)
+			return
+		}
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
 	default:
 		bapp.logger.Error(
@@ -118,6 +173,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 			"state", bapp.fsm.Current(userID),
 			"user", userID,
 		)
+		bapp.HelpHandler(ctx, b, update)
 	}
 }
 
@@ -178,6 +234,10 @@ func appInit(ctx context.Context, app *BotApplication) {
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "track",
 		bot.MatchTypeCommand, app.TrackHandler,
+	)
+	app.Bot.RegisterHandler(
+		bot.HandlerTypeMessageText, "",
+		bot.MatchTypeContains, app.InputHandler,
 	)
 	app.Bot.RegisterHandler(
 		bot.HandlerTypeMessageText, "cancel",
