@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,16 +17,16 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
-		slog.Error(err.Error())
+		logger.Error(err.Error())
 		os.Exit(1)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	hc := http.Client{}
 	c, err := scrapper.NewClient(cfg.ScrapperURL, scrapper.WithHTTPClient(&hc))
@@ -50,7 +51,7 @@ func main() {
 
 	go func() {
 		logger.Info("server has been started on", "addr", s.Addr)
-		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server exit with error", "err", err)
 		}
 	}()

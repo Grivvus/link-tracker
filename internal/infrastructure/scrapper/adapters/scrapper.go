@@ -109,7 +109,7 @@ func (s *ScrapperAdapter) DeleteTGChat(
 	if chatID < 0 {
 		return ports.ErrBadParams
 	}
-	err := s.chatRepo.Delete(chatID)
+	err := s.chatRepo.Delete(ctx, chatID)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntityNotFound) {
 			return ports.ErrNoChatWithThisID
@@ -125,7 +125,7 @@ func (s *ScrapperAdapter) RegisterTGChat(
 	if chatID < 0 {
 		return ports.ErrBadParams
 	}
-	err := s.chatRepo.Register(chatID)
+	err := s.chatRepo.Register(ctx, chatID)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntityAlreadyExists) {
 			return ports.ErrChatAlreadyExist

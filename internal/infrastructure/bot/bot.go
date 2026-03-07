@@ -37,7 +37,7 @@ func New(
 		bot.WithDebug(),
 		bot.WithDefaultHandler(app.DefaultHandler),
 	}
-	b, err := bot.New(cfg.Token, opts...)
+	b, err := bot.New(cfg.BotToken, opts...)
 	if err != nil {
 		return nil, err
 	}
