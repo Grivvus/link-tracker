@@ -2,6 +2,8 @@ package bot
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -211,17 +213,54 @@ func (bapp *BotApplication) CancelHandler(ctx context.Context, b *bot.Bot, updat
 
 func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("Untrack handler was called for", "chat", update.Message.Chat.ID)
+	linkToDelete := update.Message.Text
+	resp, err := bapp.scrapperPort.DeleteLink(ctx, dto.DeleteLink{
+		ChatID: update.Message.Chat.ID, Link: linkToDelete,
+	})
+	if err != nil {
+		var msgOnErr string
+		if errors.Is(err, ports.ErrBadParams) {
+			msgOnErr = "Некорректные параметры запроса"
+		} else if errors.Is(err, ports.ErrNoLink) {
+			msgOnErr = "Такой ссылки не существует"
+		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+			msgOnErr = "Вы еще не зарегистрировались, воспользуйтесь командой /start"
+		} else {
+			msgOnErr = "Что-то пошло не так, попробуйте повторить свой запрос позже"
+		}
+
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID, Text: msgOnErr,
+		})
+		return
+	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   "untrack",
+		Text:   fmt.Sprintf("Ссылка '%s' была успешно удалена", resp.URL),
 	})
 }
 
 func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("List handler was called for", "chat", update.Message.Chat.ID)
+	chatID := update.Message.Chat.ID
+	resp, err := bapp.scrapperPort.GetTrackedLinks(ctx, chatID)
+	if err != nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "Что-то пошло не так",
+		})
+		return
+	}
+	var sb strings.Builder
+	for _, link := range resp {
+		sb.WriteString(fmt.Sprintf("%s, tags: %v\n", link.URL, link.Tags))
+	}
+	if len(resp) == 0 {
+		sb.WriteString("No links yet\n")
+	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   "list",
+		Text:   sb.String(),
 	})
 }
 
