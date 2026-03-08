@@ -68,10 +68,29 @@ func (bapp *BotApplication) DefaultHandler(ctx context.Context, b *bot.Bot, upda
 }
 
 func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	bapp.logger.Info("Start handler was called for", "chat", update.Message.Chat.ID)
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   startMsgText,
+	})
+	bapp.logger.Info("Start handler was called for", "chat", update.Message.Chat.ID)
+	err := bapp.scrapperPort.RegisterTGChat(ctx, update.Message.Chat.ID)
+	if err != nil {
+		if errors.Is(err, ports.ErrChatAlreadyExist) {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "А мы про тебя уже все знаем!",
+			})
+		} else {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "Не получилось зарегистрировать чат, попробуй позже",
+			})
+		}
+		return
+	}
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   "Чат был успешно зарегистрирован",
 	})
 }
 
