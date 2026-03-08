@@ -44,7 +44,10 @@ func main() {
 		slog.Error("can't start bot", "with err", err)
 		os.Exit(1)
 	}
-	var serv oapibot.ServerInterface = server.New(logger)
+
+	bp := adapters.NewBotPort(botapp.Bot, logger)
+
+	var serv oapibot.ServerInterface = server.New(logger, bp)
 	mux := http.NewServeMux()
 	h := oapibot.HandlerFromMux(serv, mux)
 	s := http.Server{

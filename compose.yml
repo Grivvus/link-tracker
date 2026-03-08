@@ -1,5 +1,8 @@
 services:
   bot:
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     build:
       context: .
       dockerfile: Dockerfile.bot
@@ -11,5 +14,5 @@ services:
       context: .
       dockerfile: Dockerfile.scrapper
     ports:
-      - 8001:8001
+      - 8001:8000
     restart: no
