@@ -213,9 +213,17 @@ func (bapp *BotApplication) CancelHandler(ctx context.Context, b *bot.Bot, updat
 
 func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("Untrack handler was called for", "chat", update.Message.Chat.ID)
-	linkToDelete := update.Message.Text
+	text := update.Message.Text
+	textWords := strings.Split(text, " ")
+	if len(textWords) != 2 {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Неправильное использование: формат - '/untrack ссылка_для_удаления'",
+		})
+		return
+	}
 	resp, err := bapp.scrapperPort.DeleteLink(ctx, dto.DeleteLink{
-		ChatID: update.Message.Chat.ID, Link: linkToDelete,
+		ChatID: update.Message.Chat.ID, Link: textWords[1],
 	})
 	if err != nil {
 		var msgOnErr string
@@ -245,9 +253,17 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 	chatID := update.Message.Chat.ID
 	resp, err := bapp.scrapperPort.GetTrackedLinks(ctx, chatID)
 	if err != nil {
+		var msgOnErr string
+		if errors.Is(err, ports.ErrBadParams) {
+			msgOnErr = "Некорректные параметры запроса"
+		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+			msgOnErr = "Вы еще не зарегистрировались, воспользуйтесь командой /start"
+		} else {
+			msgOnErr = "Что-то пошло не так, попробуйте повторить запрос позже"
+		}
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Что-то пошло не так",
+			Text:   msgOnErr,
 		})
 		return
 	}

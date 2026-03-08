@@ -45,9 +45,9 @@ func (s *ScrapperAdapter) DeleteLink(
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.DeleteLinkResponse{}, errors.New("wrong request parameters")
+			return dto.DeleteLinkResponse{}, ports.ErrBadParams
 		case 404:
-			return dto.DeleteLinkResponse{}, errors.New("unknown chat or link")
+			return dto.DeleteLinkResponse{}, ports.ErrNoLink
 		default:
 			return dto.DeleteLinkResponse{}, errors.New("unexpected error")
 		}
@@ -87,9 +87,9 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.TrackedLinksResponse{}, errors.New("wrong request parameters")
+			return dto.TrackedLinksResponse{}, ports.ErrBadParams
 		case 404:
-			return dto.TrackedLinksResponse{}, errors.New("unknown chat")
+			return dto.TrackedLinksResponse{}, ports.ErrNoChatWithThisID
 		default:
 			return dto.TrackedLinksResponse{}, errors.New("unexpected error")
 		}
@@ -142,11 +142,11 @@ func (s *ScrapperAdapter) AddLink(
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.AddLinkResponse{}, errors.New("wrong request parameters")
+			return dto.AddLinkResponse{}, ports.ErrBadParams
 		case 404:
-			return dto.AddLinkResponse{}, errors.New("unkown chat")
+			return dto.AddLinkResponse{}, ports.ErrNoChatWithThisID
 		case 409:
-			return dto.AddLinkResponse{}, errors.New("link was already tracked")
+			return dto.AddLinkResponse{}, ports.ErrLinkAlreadyTracked
 		default:
 			return dto.AddLinkResponse{}, errors.New("unexpected error")
 		}
@@ -182,9 +182,9 @@ func (s *ScrapperAdapter) DeleteTGChat(
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return errors.New("invalid request parameters")
+			return ports.ErrBadParams
 		case 404:
-			return errors.New("unkown chat")
+			return ports.ErrNoChatWithThisID
 		default:
 			return errors.New("unexpected error")
 		}
@@ -208,9 +208,9 @@ func (s *ScrapperAdapter) RegisterTGChat(
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return errors.New("invalid request parameters")
+			return ports.ErrBadParams
 		case 409:
-			return errors.New("chat was already registered")
+			return ports.ErrChatAlreadyExist
 		default:
 			return errors.New("unexpected error")
 		}
