@@ -13,5 +13,6 @@
 ```bash
 # После копирования надо заменить тестовое значение на реальный токен
 cp .env.example .env
-go run cmd/bot/main.go
+# Запускаем оба сервиса через docker
+docker compose up --build
 ```
