@@ -3,6 +3,7 @@ module gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker
 go 1.25.1
 
 require (
+	github.com/go-co-op/gocron/v2 v2.19.1
 	github.com/go-telegram/bot v1.19.0
 	github.com/go-telegram/fsm v0.2.0
 	github.com/joho/godotenv v1.5.1
@@ -14,7 +15,6 @@ require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/getkin/kin-openapi v0.133.0 // indirect
-	github.com/go-co-op/gocron/v2 v2.19.1 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
