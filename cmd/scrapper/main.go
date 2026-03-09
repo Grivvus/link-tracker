@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/go-co-op/gocron/v2"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/usecase"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
@@ -48,6 +50,16 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
+
+	linkStatePort := adapters.NewLinkStateAdapter(logger)
+
+	sched, err := gocron.NewScheduler()
+	if err != nil {
+		logger.Error("can't init scheduler", "err", err)
+		os.Exit(1)
+	}
+	poller := usecase.NewLinkPollingUseCase(logger, sched, linkStatePort, botPort, trackingRepo)
+	poller.Start(ctx)
 
 	go func() {
 		logger.Info("server has been started on", "addr", httpServer.Addr)
