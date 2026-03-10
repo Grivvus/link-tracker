@@ -34,10 +34,10 @@ func (serv *BotServer) PostUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	// if we're pass request context, it will be canceled before bot send the message
 	err = serv.port.NotifyAboutUpdatedLinks(context.Background(), dto.LinkUpdate{
-		ID:          *updates.Id,
-		TGChatIDs:   *updates.TgChatIds,
-		URL:         *updates.Url,
-		Description: *updates.Description,
+		ID:          updates.Id,
+		TGChatIDs:   updates.TgChatIds,
+		URL:         updates.Url,
+		Description: updates.Description,
 	})
 	if err != nil {
 		if errors.Is(err, ports.ErrBadParams) {

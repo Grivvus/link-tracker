@@ -14,20 +14,20 @@ import (
 )
 
 type ScrapperAdapter struct {
-	log          *slog.Logger
-	chatRepo     repository.ChatRepository
-	trackingRepo repository.TrackingRepository
+	log              *slog.Logger
+	chatRepo         repository.ChatRepository
+	subscriptionRepo repository.SubscriptionRepository
 }
 
 func NewScrapperAdapter(
 	l *slog.Logger,
 	chatRepo repository.ChatRepository,
-	trackingRepo repository.TrackingRepository,
+	subscriptionRepo repository.SubscriptionRepository,
 ) ports.ScrapperPort {
 	return &ScrapperAdapter{
-		log:          l,
-		chatRepo:     chatRepo,
-		trackingRepo: trackingRepo,
+		log:              l,
+		chatRepo:         chatRepo,
+		subscriptionRepo: subscriptionRepo,
 	}
 }
 
@@ -38,7 +38,7 @@ func (s *ScrapperAdapter) DeleteLink(
 	if err != nil {
 		return dto.DeleteLinkResponse{}, fmt.Errorf("%w: link is a not valid url", ports.ErrBadParams)
 	}
-	removed, err := s.trackingRepo.RemoveByURL(ctx, in.ChatID, parsedURL)
+	removed, err := s.subscriptionRepo.RemoveByURL(ctx, in.ChatID, parsedURL)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntityNotFound) {
 			return dto.DeleteLinkResponse{}, ports.ErrNoLink

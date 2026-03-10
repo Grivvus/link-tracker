@@ -5,35 +5,32 @@ package scrapper
 
 // AddLinkRequest defines model for AddLinkRequest.
 type AddLinkRequest struct {
-	Link *string   `json:"link,omitempty"`
-	Tags *[]string `json:"tags,omitempty"`
+	Link string   `json:"link"`
+	Tags []string `json:"tags"`
 }
 
 // ApiErrorResponse defines model for ApiErrorResponse.
 type ApiErrorResponse struct {
-	Code             *string   `json:"code,omitempty"`
-	Description      *string   `json:"description,omitempty"`
-	ExceptionMessage *string   `json:"exceptionMessage,omitempty"`
-	ExceptionName    *string   `json:"exceptionName,omitempty"`
-	Stacktrace       *[]string `json:"stacktrace,omitempty"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
 }
 
 // LinkResponse defines model for LinkResponse.
 type LinkResponse struct {
-	Id   *int64    `json:"id,omitempty"`
-	Tags *[]string `json:"tags,omitempty"`
-	Url  *string   `json:"url,omitempty"`
+	Id   int64    `json:"id"`
+	Tags []string `json:"tags"`
+	Url  string   `json:"url"`
 }
 
 // ListLinksResponse defines model for ListLinksResponse.
 type ListLinksResponse struct {
-	Links *[]LinkResponse `json:"links,omitempty"`
-	Size  *int32          `json:"size,omitempty"`
+	Links []LinkResponse `json:"links"`
+	Size  int32          `json:"size"`
 }
 
 // RemoveLinkRequest defines model for RemoveLinkRequest.
 type RemoveLinkRequest struct {
-	Link *string `json:"link,omitempty"`
+	Link string `json:"link"`
 }
 
 // DeleteLinksParams defines parameters for DeleteLinks.

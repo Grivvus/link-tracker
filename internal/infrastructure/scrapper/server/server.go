@@ -34,14 +34,9 @@ func (s *ScrapperServer) DeleteLinks(
 		http.Error(w, "invalid request parameters", http.StatusBadRequest)
 		return
 	}
-	if removeData.Link == nil {
-		s.log.Error("RemoveLinkRequest.Link shouldn't be nil")
-		http.Error(w, "invalid request parameters", http.StatusBadRequest)
-		return
-	}
 	deleteDTO := dto.DeleteLink{
 		ChatID: params.TgChatId,
-		Link:   *removeData.Link,
+		Link:   removeData.Link,
 	}
 	respDTO, err := s.port.DeleteLink(r.Context(), deleteDTO)
 	if err != nil {
@@ -60,9 +55,9 @@ func (s *ScrapperServer) DeleteLinks(
 	}
 
 	var resp = scrapper.LinkResponse{
-		Id:   &respDTO.ID,
-		Url:  &respDTO.URL,
-		Tags: &respDTO.Tags,
+		Id:   respDTO.ID,
+		Url:  respDTO.URL,
+		Tags: respDTO.Tags,
 	}
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
@@ -100,14 +95,14 @@ func (s *ScrapperServer) GetLinks(
 	respLinks := make([]scrapper.LinkResponse, n)
 	for i, link := range links {
 		respLinks[i] = scrapper.LinkResponse{
-			Id:   &link.ID,
-			Url:  &link.URL,
-			Tags: &link.Tags,
+			Id:   link.ID,
+			Url:  link.URL,
+			Tags: link.Tags,
 		}
 	}
 
-	resp.Links = &respLinks
-	resp.Size = &n
+	resp.Links = respLinks
+	resp.Size = n
 
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
@@ -129,21 +124,11 @@ func (s *ScrapperServer) PostLinks(
 		http.Error(w, "invalid request parameters", http.StatusBadRequest)
 		return
 	}
-	if linkData.Link == nil {
-		s.log.Error("AddLinkRequest.Link shouldn't be nil")
-		http.Error(w, "invalid request parameters", http.StatusBadRequest)
-		return
-	}
-	if linkData.Tags == nil {
-		s.log.Warn("AddLinkRequest.Tags shouldn't be nil")
-		tgs := make([]string, 0)
-		linkData.Tags = &tgs
-	}
 
 	addLinkDTO := dto.AddLink{
 		ChatID: params.TgChatId,
-		Link:   *linkData.Link,
-		Tags:   *linkData.Tags,
+		Link:   linkData.Link,
+		Tags:   linkData.Tags,
 	}
 	addedLink, err := s.port.AddLink(r.Context(), addLinkDTO)
 	if err != nil {
@@ -165,9 +150,9 @@ func (s *ScrapperServer) PostLinks(
 	}
 
 	resp := scrapper.LinkResponse{
-		Id:   &addedLink.ID,
-		Url:  &addedLink.URL,
-		Tags: &addedLink.Tags,
+		Id:   addedLink.ID,
+		Url:  addedLink.URL,
+		Tags: addedLink.Tags,
 	}
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {

@@ -12,20 +12,28 @@ import (
 )
 
 type Storage struct {
-	trackingStorage      map[int64]domain.Tracking
-	chatStorage          map[int64]struct{}
-	currentMaxTrackingID atomic.Int64
-	rwmuChat             sync.RWMutex
-	rwmuTracking         sync.RWMutex
+	linkStorage            map[int64]domain.Link
+	subscriptionStorage    map[int64]domain.Subscription
+	linkIDByURL            map[string]int64
+	subscriptionIDByChatID map[int64]map[int64]int64
+	chatStorage            map[int64]struct{}
+	currentMaxLinkID       atomic.Int64
+	currentMaxSubID        atomic.Int64
+	rwmuChat               sync.RWMutex
+	rwmuLink               sync.RWMutex
+	rwmuSubscription       sync.RWMutex
 }
 
 var storage *Storage = nil
 
-func NewTrackingStorage() repository.TrackingRepository {
+func NewSubscriptionStorage() repository.SubscriptionRepository {
 	if storage == nil {
 		storage = &Storage{
-			trackingStorage: make(map[int64]domain.Tracking, 10),
-			chatStorage:     make(map[int64]struct{}, 10),
+			linkStorage:            make(map[int64]domain.Link, 10),
+			subscriptionStorage:    make(map[int64]domain.Subscription, 10),
+			linkIDByURL:            make(map[string]int64, 10),
+			subscriptionIDByChatID: make(map[int64]map[int64]int64, 10),
+			chatStorage:            make(map[int64]struct{}, 10),
 		}
 	}
 	return storage
@@ -34,67 +42,207 @@ func NewTrackingStorage() repository.TrackingRepository {
 func NewChatStorage() repository.ChatRepository {
 	if storage == nil {
 		storage = &Storage{
-			trackingStorage: make(map[int64]domain.Tracking, 10),
-			chatStorage:     make(map[int64]struct{}, 10),
+			linkStorage:            make(map[int64]domain.Link, 10),
+			subscriptionStorage:    make(map[int64]domain.Subscription, 10),
+			linkIDByURL:            make(map[string]int64, 10),
+			subscriptionIDByChatID: make(map[int64]map[int64]int64, 10),
+			chatStorage:            make(map[int64]struct{}, 10),
 		}
 	}
 	return storage
 }
 
-func (st *Storage) Save(
-	ctx context.Context, t domain.Tracking,
-) (domain.Tracking, error) {
-	id := st.getNextTrackingID()
-	t.ID = id
-	st.rwmuTracking.Lock()
-	defer st.rwmuTracking.Unlock()
-	st.trackingStorage[id] = t
-	return t, nil
+func (st *Storage) Subscribe(
+	ctx context.Context, link domain.Link, chatID int64, tags []string,
+) (domain.Subscription, error) {
+	st.rwmuChat.RLock()
+	_, chatExists := st.chatStorage[chatID]
+	st.rwmuChat.RUnlock()
+	if !chatExists {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: no chat with this id", repository.ErrEntityNotFound,
+		)
+	}
+
+	linkID, err := st.saveOrGetLink(link)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+
+	st.rwmuSubscription.Lock()
+	defer st.rwmuSubscription.Unlock()
+
+	if _, ok := st.subscriptionIDByChatID[chatID]; !ok {
+		st.subscriptionIDByChatID[chatID] = make(map[int64]int64, 2)
+	}
+	if _, alreadySubscribed := st.subscriptionIDByChatID[chatID][linkID]; alreadySubscribed {
+		return domain.Subscription{}, repository.ErrEntityAlreadyExists
+	}
+
+	subID := st.getNextSubscriptionID()
+	newSub := domain.NewSubscription(subID, linkID, chatID, tags)
+	st.subscriptionStorage[subID] = newSub
+	st.subscriptionIDByChatID[chatID][linkID] = subID
+	return newSub, nil
 }
 
-func (st *Storage) FindByChat(
+func (st *Storage) Unsubscribe(
+	ctx context.Context, link domain.Link, chatID int64,
+) error {
+	st.rwmuChat.RLock()
+	_, chatExists := st.chatStorage[chatID]
+	st.rwmuChat.RUnlock()
+	if !chatExists {
+		return fmt.Errorf("%w: no chat with this id", repository.ErrEntityNotFound)
+	}
+
+	linkID, err := st.findLinkID(link)
+	if err != nil {
+		return err
+	}
+
+	st.rwmuSubscription.Lock()
+	defer st.rwmuSubscription.Unlock()
+	byLink, ok := st.subscriptionIDByChatID[chatID]
+	if !ok {
+		return fmt.Errorf("%w: no subscriptions for this chat", repository.ErrEntityNotFound)
+	}
+	subID, ok := byLink[linkID]
+	if !ok {
+		return fmt.Errorf("%w: subscription not found", repository.ErrEntityNotFound)
+	}
+	delete(byLink, linkID)
+	if len(byLink) == 0 {
+		delete(st.subscriptionIDByChatID, chatID)
+	}
+	delete(st.subscriptionStorage, subID)
+	return nil
+}
+
+func (st *Storage) FindLinkByURL(
+	ctx context.Context, inputURL *url.URL,
+) (domain.Link, error) {
+	if inputURL == nil {
+		return domain.Link{}, fmt.Errorf(
+			"%w: nil link url", repository.ErrEntityNotFound,
+		)
+	}
+	key := normalizeURL(inputURL)
+
+	st.rwmuLink.RLock()
+	defer st.rwmuLink.RUnlock()
+	linkID, ok := st.linkIDByURL[key]
+	if !ok {
+		return domain.Link{}, fmt.Errorf("%w: no such link", repository.ErrEntityNotFound)
+	}
+	link, ok := st.linkStorage[linkID]
+	if !ok {
+		return domain.Link{}, fmt.Errorf("%w: no such link", repository.ErrEntityNotFound)
+	}
+	return link, nil
+}
+
+func (st *Storage) AllChatSubscriptions(
 	ctx context.Context, chatID int64,
-) ([]domain.Tracking, error) {
-	// check if chat is registered
-	ret := make([]domain.Tracking, 0)
-	for _, tracking := range st.trackingStorage {
-		if tracking.ChatID == chatID {
-			ret = append(ret, tracking)
+) ([]domain.Subscription, error) {
+	st.rwmuChat.RLock()
+	_, chatExists := st.chatStorage[chatID]
+	st.rwmuChat.RUnlock()
+	if !chatExists {
+		return nil, fmt.Errorf("%w: no chat with this id", repository.ErrEntityNotFound)
+	}
+
+	st.rwmuSubscription.RLock()
+	defer st.rwmuSubscription.RUnlock()
+
+	byLink, ok := st.subscriptionIDByChatID[chatID]
+	if !ok {
+		return []domain.Subscription{}, nil
+	}
+	ret := make([]domain.Subscription, 0, len(byLink))
+	for _, subID := range byLink {
+		sub, ok := st.subscriptionStorage[subID]
+		if ok {
+			ret = append(ret, sub)
 		}
 	}
 	return ret, nil
 }
 
-func (st *Storage) RemoveByURL(
-	ctx context.Context, chatID int64, url *url.URL,
-) (domain.Tracking, error) {
-	st.rwmuChat.RLock()
-	if _, ok := st.chatStorage[chatID]; !ok {
-		return domain.Tracking{}, fmt.Errorf(
-			"%w: no chat with this id", repository.ErrEntityNotFound,
-		)
+func (st *Storage) AllLinkSubscriptions(
+	ctx context.Context, link domain.Link,
+) ([]domain.Subscription, error) {
+	linkID, err := st.findLinkID(link)
+	if err != nil {
+		return nil, err
 	}
-	st.rwmuChat.RUnlock()
+	st.rwmuSubscription.RLock()
+	defer st.rwmuSubscription.RUnlock()
 
-	st.rwmuTracking.Lock()
-	defer st.rwmuTracking.Unlock()
-	for _, tracking := range st.trackingStorage {
-		if tracking.ChatID == chatID && tracking.URL.String() == url.String() {
-			delete(st.trackingStorage, tracking.ID)
-			return tracking, nil
+	ret := make([]domain.Subscription, 0, 2)
+	for _, sub := range st.subscriptionStorage {
+		if sub.LinkID == linkID {
+			ret = append(ret, sub)
 		}
 	}
-	return domain.Tracking{}, fmt.Errorf(
-		"%w: no url was found", repository.ErrEntityNotFound,
-	)
+	return ret, nil
 }
 
-func (st *Storage) getNextTrackingID() int64 {
-	newID := st.currentMaxTrackingID.Add(1)
+func (st *Storage) saveOrGetLink(link domain.Link) (int64, error) {
+	if link.URL == nil {
+		return 0, fmt.Errorf("%w: nil link url", repository.ErrEntityNotFound)
+	}
+	key := normalizeURL(link.URL)
+
+	st.rwmuLink.Lock()
+	defer st.rwmuLink.Unlock()
+	if existingID, ok := st.linkIDByURL[key]; ok {
+		return existingID, nil
+	}
+
+	newID := st.getNextLinkID()
+	link.ID = newID
+	st.linkStorage[newID] = link
+	st.linkIDByURL[key] = newID
+	return newID, nil
+}
+
+func (st *Storage) findLinkID(link domain.Link) (int64, error) {
+	if link.ID > 0 {
+		st.rwmuLink.RLock()
+		defer st.rwmuLink.RUnlock()
+		if _, ok := st.linkStorage[link.ID]; ok {
+			return link.ID, nil
+		}
+		return 0, fmt.Errorf("%w: no such link", repository.ErrEntityNotFound)
+	}
+	if link.URL == nil {
+		return 0, fmt.Errorf("%w: no such link", repository.ErrEntityNotFound)
+	}
+	key := normalizeURL(link.URL)
+
+	st.rwmuLink.RLock()
+	defer st.rwmuLink.RUnlock()
+	linkID, ok := st.linkIDByURL[key]
+	if !ok {
+		return 0, fmt.Errorf("%w: no such link", repository.ErrEntityNotFound)
+	}
+	return linkID, nil
+}
+
+func (st *Storage) getNextLinkID() int64 {
+	newID := st.currentMaxLinkID.Add(1)
+	return newID
+}
+
+func (st *Storage) getNextSubscriptionID() int64 {
+	newID := st.currentMaxSubID.Add(1)
 	return newID
 }
 
 func (st *Storage) Register(ctx context.Context, chatID int64) error {
+	st.rwmuChat.Lock()
+	defer st.rwmuChat.Unlock()
 	if _, ok := st.chatStorage[chatID]; ok {
 		return repository.ErrEntityAlreadyExists
 	}
@@ -117,4 +265,8 @@ func (st *Storage) isChatRegistered(chatID int64) bool {
 	defer st.rwmuChat.RUnlock()
 	_, ok := st.chatStorage[chatID]
 	return ok
+}
+
+func normalizeURL(linkURL *url.URL) string {
+	return linkURL.String()
 }

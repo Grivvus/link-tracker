@@ -26,10 +26,10 @@ func (b *BotAdapter) NotifyAboutUpdatedLinks(
 	ctx context.Context, in dto.LinkUpdate,
 ) error {
 	var body = bot.PostUpdatesJSONRequestBody{
-		Id:          &in.ID,
-		Description: &in.Description,
-		TgChatIds:   &in.TGChatIDs,
-		Url:         &in.URL,
+		Id:          in.ID,
+		Description: in.Description,
+		TgChatIds:   in.TGChatIDs,
+		Url:         in.URL,
 	}
 	resp, err := b.client.PostUpdates(ctx, body)
 	if err != nil {

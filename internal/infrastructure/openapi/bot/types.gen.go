@@ -5,19 +5,16 @@ package bot
 
 // ApiErrorResponse defines model for ApiErrorResponse.
 type ApiErrorResponse struct {
-	Code             *string   `json:"code,omitempty"`
-	Description      *string   `json:"description,omitempty"`
-	ExceptionMessage *string   `json:"exceptionMessage,omitempty"`
-	ExceptionName    *string   `json:"exceptionName,omitempty"`
-	Stacktrace       *[]string `json:"stacktrace,omitempty"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
 }
 
 // LinkUpdate defines model for LinkUpdate.
 type LinkUpdate struct {
-	Description *string  `json:"description,omitempty"`
-	Id          *int64   `json:"id,omitempty"`
-	TgChatIds   *[]int64 `json:"tgChatIds,omitempty"`
-	Url         *string  `json:"url,omitempty"`
+	Description string  `json:"description"`
+	Id          int64   `json:"id"`
+	TgChatIds   []int64 `json:"tgChatIds"`
+	Url         string  `json:"url"`
 }
 
 // PostUpdatesJSONRequestBody defines body for PostUpdates for application/json ContentType.

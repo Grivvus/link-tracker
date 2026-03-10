@@ -38,7 +38,7 @@ func main() {
 	_ = botPort // needed, when i implement notifier
 
 	chatRepo := storage.NewChatStorage()
-	trackingRepo := storage.NewTrackingStorage()
+	subscriptionRepo := storage.NewSubscriptionStorage()
 	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, trackingRepo)
 	var server scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()

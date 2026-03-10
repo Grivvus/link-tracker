@@ -28,21 +28,21 @@ components:
   schemas:
     ApiErrorResponse:
       type: object
+      required:
+        - description
+        - code
       properties:
         description:
           type: string
         code:
           type: string
-        exceptionName:
-          type: string
-        exceptionMessage:
-          type: string
-        stacktrace:
-          type: array
-          items:
-            type: string
     LinkUpdate:
       type: object
+      required:
+        - id
+        - url
+        - description
+        - tgChatIds
       properties:
         id:
           type: integer

@@ -30,7 +30,7 @@ func (s *ScrapperAdapter) DeleteLink(
 	var params scrapper.DeleteLinksParams
 	params.TgChatId = in.ChatID
 	var body = scrapper.DeleteLinksJSONRequestBody{
-		Link: &in.Link,
+		Link: in.Link,
 	}
 	resp, err := s.client.DeleteLinks(ctx, &params, body)
 	if err != nil {
@@ -111,7 +111,7 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 		s.log.Warn("ListLinksResponse.Links shouldn't be null", "for chat", chatID)
 		out = []dto.TrackedLink{}
 	} else {
-		links := *respBody.Links
+		links := respBody.Links
 		out = make([]dto.TrackedLink, 0, len(links))
 		for _, link := range links {
 			dtoLink := linkResponseToDTO(link)
@@ -126,8 +126,8 @@ func (s *ScrapperAdapter) AddLink(
 ) (dto.AddLinkResponse, error) {
 	params := scrapper.PostLinksParams{TgChatId: in.ChatID}
 	body := scrapper.PostLinksJSONRequestBody{
-		Link: &in.Link,
-		Tags: &in.Tags,
+		Link: in.Link,
+		Tags: in.Tags,
 	}
 	resp, err := s.client.PostLinks(ctx, &params, body)
 	if err != nil {
@@ -220,16 +220,12 @@ func (s *ScrapperAdapter) RegisterTGChat(
 
 func linkResponseToDTO(respBody scrapper.LinkResponse) dto.DeleteLinkResponse {
 	var out dto.DeleteLinkResponse
-	if respBody.Id == nil || respBody.Url == nil {
-		// assertion
-		panic("ID and URL is required")
-	}
-	out.ID = *respBody.Id
-	out.URL = *respBody.Url
+	out.ID = respBody.Id
+	out.URL = respBody.Url
 	if respBody.Tags == nil {
 		out.Tags = []string{}
 	} else {
-		out.Tags = *respBody.Tags
+		out.Tags = respBody.Tags
 	}
 	return out
 }

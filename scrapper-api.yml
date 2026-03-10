@@ -162,6 +162,10 @@ components:
   schemas:
     LinkResponse:
       type: object
+      required:
+        - id
+        - url
+        - tags
       properties:
         id:
           type: integer
@@ -175,21 +179,19 @@ components:
             type: string
     ApiErrorResponse:
       type: object
+      required:
+        - description
+        - code
       properties:
         description:
           type: string
         code:
           type: string
-        exceptionName:
-          type: string
-        exceptionMessage:
-          type: string
-        stacktrace:
-          type: array
-          items:
-            type: string
     AddLinkRequest:
       type: object
+      required:
+        - link
+        - tags
       properties:
         link:
           type: string
@@ -200,6 +202,9 @@ components:
             type: string
     ListLinksResponse:
       type: object
+      required:
+        - links
+        - size
       properties:
         links:
           type: array
@@ -210,6 +215,8 @@ components:
           format: int32
     RemoveLinkRequest:
       type: object
+      required:
+        - link
       properties:
         link:
           type: string
