@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 )
 
 var ErrNoChatWithThisID = errors.New("can't find chat with this id")
@@ -14,9 +14,11 @@ var ErrBadParams = errors.New("received params didn't match specification")
 var ErrLinkAlreadyTracked = errors.New("this link is already tracked")
 
 type ScrapperPort interface {
-	DeleteLink(ctx context.Context, in dto.DeleteLink) (dto.DeleteLinkResponse, error)
-	GetTrackedLinks(ctx context.Context, chatID int64) (dto.TrackedLinksResponse, error)
-	AddLink(ctx context.Context, in dto.AddLink) (dto.AddLinkResponse, error)
+	DeleteLink(ctx context.Context, cmd model.UntrackLinkCmd) (model.TrackedLinkView, error)
+	GetTrackedLinks(
+		ctx context.Context, query model.ListTrackedLinksQuery,
+	) ([]model.TrackedLinkView, error)
+	AddLink(ctx context.Context, cmd model.TrackLinkCmd) (model.TrackedLinkView, error)
 	DeleteTGChat(ctx context.Context, chatID int64) error
 	RegisterTGChat(ctx context.Context, chatID int64) error
 }

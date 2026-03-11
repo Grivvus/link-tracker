@@ -39,7 +39,7 @@ func main() {
 
 	chatRepo := storage.NewChatStorage()
 	subscriptionRepo := storage.NewSubscriptionStorage()
-	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, trackingRepo)
+	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subscriptionRepo)
 	var server scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
 	h := scrapper.HandlerFromMux(server, mux)
@@ -58,7 +58,9 @@ func main() {
 		logger.Error("can't init scheduler", "err", err)
 		os.Exit(1)
 	}
-	poller := usecase.NewLinkPollingUseCase(logger, sched, linkStatePort, botPort, trackingRepo)
+	poller := usecase.NewLinkPollingUseCase(
+		logger, sched, linkStatePort, botPort, subscriptionRepo, chatRepo,
+	)
 	poller.Start(ctx)
 
 	go func() {

@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
+
+const githubApiURL = "https://api.github.com/repos"
 
 type GitHubClient struct {
 	logger     *slog.Logger
@@ -25,17 +26,11 @@ func NewGitHubClient(logger *slog.Logger) *GitHubClient {
 }
 
 func (g *GitHubClient) FetchRepo(
-	url *url.URL,
+	info domain.GitHubURLInfo,
 ) (dto.GithubRepository, error) {
-	if !strings.Contains(url.Path, "repos") {
-		g.logger.Error("url didn't contains 'repos'", "url", url)
-		return dto.GithubRepository{}, fmt.Errorf(
-			"%w: url-path must starts with '/repos'", ports.ErrBadParams,
-		)
-	}
-	req, err := http.NewRequest(http.MethodGet, url.String(), nil)
+	req, err := http.NewRequest(http.MethodGet, buildGitHubURL(info), nil)
 	if err != nil {
-		g.logger.Error("error creating request", "url", url)
+		g.logger.Error("error creating request", "url info", info)
 		return dto.GithubRepository{}, fmt.Errorf(
 			"%w: %w", ports.ErrBadParams, err,
 		)
@@ -44,7 +39,7 @@ func (g *GitHubClient) FetchRepo(
 	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		g.logger.Error("error executing request", "url", url, "err", err)
+		g.logger.Error("error executing request", "url info", info, "err", err)
 		return dto.GithubRepository{}, fmt.Errorf(
 			"%w: exect error: %w", ports.ErrBadResponse, err,
 		)
@@ -53,7 +48,7 @@ func (g *GitHubClient) FetchRepo(
 	if resp.StatusCode >= 400 {
 		g.logger.Error(
 			"getting error-response",
-			"url", url, "status_code", resp.StatusCode,
+			"url info", info, "status_code", resp.StatusCode,
 		)
 		return dto.GithubRepository{}, ports.ErrBadResponse
 	}
@@ -66,4 +61,10 @@ func (g *GitHubClient) FetchRepo(
 		)
 	}
 	return respDTO, nil
+}
+
+func buildGitHubURL(info domain.GitHubURLInfo) string {
+	return fmt.Sprintf(
+		"%s/%s/%s", githubApiURL, info.Username, info.RepoName,
+	)
 }

@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 )
@@ -33,10 +33,10 @@ func (serv *BotServer) PostUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// if we're pass request context, it will be canceled before bot send the message
-	err = serv.port.NotifyAboutUpdatedLinks(context.Background(), dto.LinkUpdate{
-		ID:          updates.Id,
-		TGChatIDs:   updates.TgChatIds,
-		URL:         updates.Url,
+	err = serv.port.NotifyAboutUpdatedLinks(context.Background(), model.LinkUpdatedEvent{
+		LinkID:      updates.Id,
+		ChatIDs:     updates.TgChatIds,
+		RawURL:      updates.Url,
 		Description: updates.Description,
 	})
 	if err != nil {

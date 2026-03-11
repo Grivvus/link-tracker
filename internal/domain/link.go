@@ -36,7 +36,7 @@ type StackoverflowURLInfo struct {
 	QuestionID int64
 }
 
-func NewLink(id int64, rawURL string) (Link, error) {
+func NewLink(rawURL string) (Link, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return Link{}, fmt.Errorf("%w: url has invalid format", ErrBadURL)
@@ -70,7 +70,7 @@ func NewLink(id int64, rawURL string) (Link, error) {
 		return Link{}, fmt.Errorf("%w: service is not supported", ErrBadURL)
 	}
 	return Link{
-		ID:         id,
+		ID:         0,
 		URL:        parsed,
 		LastUpdate: time.Now().UTC(),
 		lType:      lType,

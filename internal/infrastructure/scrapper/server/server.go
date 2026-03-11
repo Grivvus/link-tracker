@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 )
@@ -34,11 +34,11 @@ func (s *ScrapperServer) DeleteLinks(
 		http.Error(w, "invalid request parameters", http.StatusBadRequest)
 		return
 	}
-	deleteDTO := dto.DeleteLink{
+	untrackLink := model.UntrackLinkCmd{
 		ChatID: params.TgChatId,
-		Link:   removeData.Link,
+		RawURL: removeData.Link,
 	}
-	respDTO, err := s.port.DeleteLink(r.Context(), deleteDTO)
+	deletedTracking, err := s.port.DeleteLink(r.Context(), untrackLink)
 	if err != nil {
 		s.log.Error(
 			"can't delete link",
@@ -55,9 +55,9 @@ func (s *ScrapperServer) DeleteLinks(
 	}
 
 	var resp = scrapper.LinkResponse{
-		Id:   respDTO.ID,
-		Url:  respDTO.URL,
-		Tags: respDTO.Tags,
+		Id:   deletedTracking.LinkID,
+		Url:  deletedTracking.RawURL,
+		Tags: deletedTracking.Tags,
 	}
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
@@ -75,7 +75,9 @@ func (s *ScrapperServer) GetLinks(
 ) {
 	s.log.Info("GetLinks handler called", "for chat", params.TgChatId)
 	chatID := params.TgChatId
-	links, err := s.port.GetTrackedLinks(r.Context(), chatID)
+	trackedLinks, err := s.port.GetTrackedLinks(
+		r.Context(), model.ListTrackedLinksQuery{ChatID: chatID},
+	)
 	if err != nil {
 		s.log.Error(
 			"can't get links",
@@ -91,12 +93,12 @@ func (s *ScrapperServer) GetLinks(
 		return
 	}
 	var resp scrapper.ListLinksResponse
-	var n int32 = int32(len(links))
+	n := int32(len(trackedLinks))
 	respLinks := make([]scrapper.LinkResponse, n)
-	for i, link := range links {
+	for i, link := range trackedLinks {
 		respLinks[i] = scrapper.LinkResponse{
-			Id:   link.ID,
-			Url:  link.URL,
+			Id:   link.LinkID,
+			Url:  link.RawURL,
 			Tags: link.Tags,
 		}
 	}
@@ -125,9 +127,9 @@ func (s *ScrapperServer) PostLinks(
 		return
 	}
 
-	addLinkDTO := dto.AddLink{
+	addLinkDTO := model.TrackLinkCmd{
 		ChatID: params.TgChatId,
-		Link:   linkData.Link,
+		RawURL: linkData.Link,
 		Tags:   linkData.Tags,
 	}
 	addedLink, err := s.port.AddLink(r.Context(), addLinkDTO)
@@ -150,8 +152,8 @@ func (s *ScrapperServer) PostLinks(
 	}
 
 	resp := scrapper.LinkResponse{
-		Id:   addedLink.ID,
-		Url:  addedLink.URL,
+		Id:   addedLink.LinkID,
+		Url:  addedLink.RawURL,
 		Tags: addedLink.Tags,
 	}
 	err = json.NewEncoder(w).Encode(resp)

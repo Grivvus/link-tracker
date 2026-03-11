@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 )
@@ -25,31 +25,31 @@ func NewScrapperPort(client scrapper.ClientInterface, logger *slog.Logger) ports
 }
 
 func (s *ScrapperAdapter) DeleteLink(
-	ctx context.Context, in dto.DeleteLink,
-) (dto.DeleteLinkResponse, error) {
+	ctx context.Context, cmd model.UntrackLinkCmd,
+) (model.TrackedLinkView, error) {
 	var params scrapper.DeleteLinksParams
-	params.TgChatId = in.ChatID
+	params.TgChatId = cmd.ChatID
 	var body = scrapper.DeleteLinksJSONRequestBody{
-		Link: in.Link,
+		Link: cmd.RawURL,
 	}
 	resp, err := s.client.DeleteLinks(ctx, &params, body)
 	if err != nil {
 		s.log.Error(
 			"can't make request DeleteLinks",
 			"err", err,
-			"for chat", in.ChatID,
+			"for chat", cmd.ChatID,
 		)
-		return dto.DeleteLinkResponse{}, fmt.Errorf("can't make a DeleteLinks request: %w", err)
+		return model.TrackedLinkView{}, fmt.Errorf("can't make a DeleteLinks request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.DeleteLinkResponse{}, ports.ErrBadParams
+			return model.TrackedLinkView{}, ports.ErrBadParams
 		case 404:
-			return dto.DeleteLinkResponse{}, ports.ErrNoLink
+			return model.TrackedLinkView{}, ports.ErrNoLink
 		default:
-			return dto.DeleteLinkResponse{}, errors.New("unexpected error")
+			return model.TrackedLinkView{}, errors.New("unexpected error")
 		}
 	}
 
@@ -59,9 +59,9 @@ func (s *ScrapperAdapter) DeleteLink(
 		s.log.Error(
 			"can't decode response from DeleteLinks request",
 			"err", err,
-			"for chat", in.ChatID,
+			"for chat", cmd.ChatID,
 		)
-		return dto.DeleteLinkResponse{}, errors.New("can't get answer from server")
+		return model.TrackedLinkView{}, errors.New("can't get answer from server")
 	}
 
 	out := linkResponseToDTO(respBody)
@@ -70,28 +70,29 @@ func (s *ScrapperAdapter) DeleteLink(
 }
 
 func (s *ScrapperAdapter) GetTrackedLinks(
-	ctx context.Context, chatID int64,
-) (dto.TrackedLinksResponse, error) {
-	var params scrapper.GetLinksParams
-	params.TgChatId = chatID
+	ctx context.Context, query model.ListTrackedLinksQuery,
+) ([]model.TrackedLinkView, error) {
+	params := scrapper.GetLinksParams{
+		TgChatId: query.ChatID,
+	}
 	resp, err := s.client.GetLinks(ctx, &params)
 	if err != nil {
 		s.log.Error(
 			"can't make request GetLinks",
 			"err", err,
-			"for chat", chatID,
+			"for chat", query.ChatID,
 		)
-		return dto.TrackedLinksResponse{}, fmt.Errorf("can't make a GetTrackedLinks request: %w", err)
+		return nil, fmt.Errorf("can't make a GetTrackedLinks request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.TrackedLinksResponse{}, ports.ErrBadParams
+			return nil, ports.ErrBadParams
 		case 404:
-			return dto.TrackedLinksResponse{}, ports.ErrNoChatWithThisID
+			return nil, ports.ErrNoChatWithThisID
 		default:
-			return dto.TrackedLinksResponse{}, errors.New("unexpected error")
+			return nil, errors.New("unexpected error")
 		}
 	}
 
@@ -101,18 +102,21 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 		s.log.Error(
 			"can't decode response from GetLinks",
 			"err", err,
-			"for chat", chatID,
+			"for chat", query.ChatID,
 		)
-		return dto.TrackedLinksResponse{}, errors.New("unexpected error")
+		return nil, errors.New("unexpected error")
 	}
 
-	var out dto.TrackedLinksResponse
+	var out []model.TrackedLinkView
 	if respBody.Links == nil {
-		s.log.Warn("ListLinksResponse.Links shouldn't be null", "for chat", chatID)
-		out = []dto.TrackedLink{}
+		s.log.Warn(
+			"ListLinksResponse.Links shouldn't be null",
+			"for chat", query.ChatID,
+		)
+		out = make([]model.TrackedLinkView, 0)
 	} else {
 		links := respBody.Links
-		out = make([]dto.TrackedLink, 0, len(links))
+		out = make([]model.TrackedLinkView, 0, len(links))
 		for _, link := range links {
 			dtoLink := linkResponseToDTO(link)
 			out = append(out, dtoLink)
@@ -122,33 +126,33 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 }
 
 func (s *ScrapperAdapter) AddLink(
-	ctx context.Context, in dto.AddLink,
-) (dto.AddLinkResponse, error) {
-	params := scrapper.PostLinksParams{TgChatId: in.ChatID}
+	ctx context.Context, cmd model.TrackLinkCmd,
+) (model.TrackedLinkView, error) {
+	params := scrapper.PostLinksParams{TgChatId: cmd.ChatID}
 	body := scrapper.PostLinksJSONRequestBody{
-		Link: in.Link,
-		Tags: in.Tags,
+		Link: cmd.RawURL,
+		Tags: cmd.Tags,
 	}
 	resp, err := s.client.PostLinks(ctx, &params, body)
 	if err != nil {
 		s.log.Error(
 			"can't make PostLinks request",
 			"err", err,
-			"for chat", in.ChatID,
+			"for chat", cmd.ChatID,
 		)
-		return dto.AddLinkResponse{}, errors.New("unexpected error")
+		return model.TrackedLinkView{}, errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		switch resp.StatusCode {
 		case 400:
-			return dto.AddLinkResponse{}, ports.ErrBadParams
+			return model.TrackedLinkView{}, ports.ErrBadParams
 		case 404:
-			return dto.AddLinkResponse{}, ports.ErrNoChatWithThisID
+			return model.TrackedLinkView{}, ports.ErrNoChatWithThisID
 		case 409:
-			return dto.AddLinkResponse{}, ports.ErrLinkAlreadyTracked
+			return model.TrackedLinkView{}, ports.ErrLinkAlreadyTracked
 		default:
-			return dto.AddLinkResponse{}, errors.New("unexpected error")
+			return model.TrackedLinkView{}, errors.New("unexpected error")
 		}
 	}
 
@@ -158,9 +162,9 @@ func (s *ScrapperAdapter) AddLink(
 		s.log.Error(
 			"ScrapperAdapter, AddLinks, can't decode response",
 			"err", err,
-			"for chat", in.ChatID,
+			"for chat", cmd.ChatID,
 		)
-		return dto.AddLinkResponse{}, errors.New("unexpected error")
+		return model.TrackedLinkView{}, errors.New("unexpected error")
 	}
 
 	return linkResponseToDTO(respBody), nil
@@ -218,10 +222,10 @@ func (s *ScrapperAdapter) RegisterTGChat(
 	return nil
 }
 
-func linkResponseToDTO(respBody scrapper.LinkResponse) dto.DeleteLinkResponse {
-	var out dto.DeleteLinkResponse
-	out.ID = respBody.Id
-	out.URL = respBody.Url
+func linkResponseToDTO(respBody scrapper.LinkResponse) model.TrackedLinkView {
+	var out model.TrackedLinkView
+	out.LinkID = respBody.Id
+	out.RawURL = respBody.Url
 	if respBody.Tags == nil {
 		out.Tags = []string{}
 	} else {

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/go-telegram/bot"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 )
 
@@ -23,13 +23,13 @@ func NewBotPort(bot *bot.Bot, logger *slog.Logger) ports.BotPort {
 }
 
 func (b *BotAdapter) NotifyAboutUpdatedLinks(
-	ctx context.Context, in dto.LinkUpdate,
+	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
-	for _, chatID := range in.TGChatIDs {
+	for _, chatID := range event.ChatIDs {
 		go func(chatID int64) {
 			_, err := b.bot.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   formNotificationMessage(in),
+				Text:   formNotificationMessage(event),
 			})
 			if err != nil {
 				slog.Error(
@@ -43,10 +43,10 @@ func (b *BotAdapter) NotifyAboutUpdatedLinks(
 	return nil
 }
 
-func formNotificationMessage(updateInfo dto.LinkUpdate) string {
+func formNotificationMessage(updateInfo model.LinkUpdatedEvent) string {
 	const baseMsg = "One of the links you're following has been updated, check out what's new."
 	return fmt.Sprintf(
 		"%s\r\nurl: %s\r\nshort description: %s",
-		baseMsg, updateInfo.URL, updateInfo.Description,
+		baseMsg, updateInfo.RawURL, updateInfo.Description,
 	)
 }

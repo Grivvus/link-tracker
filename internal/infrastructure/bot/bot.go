@@ -11,7 +11,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	"github.com/go-telegram/fsm"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/repository"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 )
@@ -184,11 +184,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			bapp.fsm.Reset(userID)
 			return
 		}
-		_, err = bapp.scrapperPort.AddLink(ctx, dto.AddLink{
-			ChatID: chatID,
-			Link:   completedLink.URL.String(),
-			Tags:   completedLink.Tags,
-		})
+		_, err = bapp.scrapperPort.AddLink(ctx, completedLink)
 		if err != nil {
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
@@ -241,8 +237,8 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 		})
 		return
 	}
-	resp, err := bapp.scrapperPort.DeleteLink(ctx, dto.DeleteLink{
-		ChatID: update.Message.Chat.ID, Link: textWords[1],
+	resp, err := bapp.scrapperPort.DeleteLink(ctx, model.UntrackLinkCmd{
+		ChatID: update.Message.Chat.ID, RawURL: textWords[1],
 	})
 	if err != nil {
 		var msgOnErr string
@@ -263,14 +259,16 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   fmt.Sprintf("Ссылка '%s' была успешно удалена", resp.URL),
+		Text:   fmt.Sprintf("Ссылка '%s' была успешно удалена", resp.RawURL),
 	})
 }
 
 func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("List handler was called for", "chat", update.Message.Chat.ID)
 	chatID := update.Message.Chat.ID
-	resp, err := bapp.scrapperPort.GetTrackedLinks(ctx, chatID)
+	resp, err := bapp.scrapperPort.GetTrackedLinks(ctx, model.ListTrackedLinksQuery{
+		ChatID: chatID,
+	})
 	if err != nil {
 		var msgOnErr string
 		if errors.Is(err, ports.ErrBadParams) {
@@ -288,7 +286,7 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 	}
 	var sb strings.Builder
 	for _, link := range resp {
-		sb.WriteString(fmt.Sprintf("%s, tags: %v\n", link.URL, link.Tags))
+		sb.WriteString(fmt.Sprintf("%s, tags: %v\n", link.RawURL, link.Tags))
 	}
 	if len(resp) == 0 {
 		sb.WriteString("No links yet\n")

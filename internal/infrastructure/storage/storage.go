@@ -88,35 +88,76 @@ func (st *Storage) Subscribe(
 
 func (st *Storage) Unsubscribe(
 	ctx context.Context, link domain.Link, chatID int64,
-) error {
+) (domain.Subscription, error) {
 	st.rwmuChat.RLock()
 	_, chatExists := st.chatStorage[chatID]
 	st.rwmuChat.RUnlock()
 	if !chatExists {
-		return fmt.Errorf("%w: no chat with this id", repository.ErrEntityNotFound)
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: no chat with this id", repository.ErrEntityNotFound,
+		)
 	}
 
 	linkID, err := st.findLinkID(link)
 	if err != nil {
-		return err
+		return domain.Subscription{}, err
 	}
 
 	st.rwmuSubscription.Lock()
 	defer st.rwmuSubscription.Unlock()
 	byLink, ok := st.subscriptionIDByChatID[chatID]
 	if !ok {
-		return fmt.Errorf("%w: no subscriptions for this chat", repository.ErrEntityNotFound)
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: no subscriptions for this chat",
+			repository.ErrEntityNotFound,
+		)
 	}
 	subID, ok := byLink[linkID]
 	if !ok {
-		return fmt.Errorf("%w: subscription not found", repository.ErrEntityNotFound)
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: subscription not found", repository.ErrEntityNotFound,
+		)
 	}
 	delete(byLink, linkID)
 	if len(byLink) == 0 {
 		delete(st.subscriptionIDByChatID, chatID)
 	}
+	sub := st.subscriptionStorage[subID]
 	delete(st.subscriptionStorage, subID)
-	return nil
+	return domain.Subscription{
+		ID:     subID,
+		ChatID: chatID,
+		LinkID: linkID,
+		Tags:   sub.Tags,
+	}, nil
+}
+
+func (st *Storage) GetAllLinks(ctx context.Context) ([]domain.Link, error) {
+	st.rwmuLink.RLock()
+	defer st.rwmuLink.RUnlock()
+	links := make([]domain.Link, 0, len(st.linkStorage))
+	for _, v := range st.linkStorage {
+		links = append(links, v)
+	}
+	return links, nil
+}
+
+func (st *Storage) GetLink(ctx context.Context, linkID int64) (domain.Link, error) {
+	st.rwmuLink.RLock()
+	defer st.rwmuLink.RUnlock()
+	link, ok := st.linkStorage[linkID]
+	if !ok {
+		return link, repository.ErrEntityNotFound
+	}
+	return link, nil
+}
+
+func (st *Storage) UpdateLink(ctx context.Context, link domain.Link) (domain.Link, error) {
+	_, err := st.saveOrGetLink(link)
+	if err != nil {
+		return domain.Link{}, err
+	}
+	return link, nil
 }
 
 func (st *Storage) FindLinkByURL(
@@ -190,7 +231,9 @@ func (st *Storage) AllLinkSubscriptions(
 
 func (st *Storage) saveOrGetLink(link domain.Link) (int64, error) {
 	if link.URL == nil {
-		return 0, fmt.Errorf("%w: nil link url", repository.ErrEntityNotFound)
+		return 0, fmt.Errorf(
+			"%w: nil link url", repository.ErrEntityNotFound,
+		)
 	}
 	key := normalizeURL(link.URL)
 

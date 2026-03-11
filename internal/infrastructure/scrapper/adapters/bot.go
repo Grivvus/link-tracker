@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/dto"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 )
@@ -23,13 +23,13 @@ func NewBotAdapter(logger *slog.Logger, client bot.ClientInterface) ports.BotPor
 }
 
 func (b *BotAdapter) NotifyAboutUpdatedLinks(
-	ctx context.Context, in dto.LinkUpdate,
+	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
 	var body = bot.PostUpdatesJSONRequestBody{
-		Id:          in.ID,
-		Description: in.Description,
-		TgChatIds:   in.TGChatIDs,
-		Url:         in.URL,
+		Id:          event.LinkID,
+		Description: event.Description,
+		TgChatIds:   event.ChatIDs,
+		Url:         event.RawURL,
 	}
 	resp, err := b.client.PostUpdates(ctx, body)
 	if err != nil {

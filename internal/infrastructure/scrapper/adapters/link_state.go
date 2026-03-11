@@ -1,10 +1,11 @@
 package adapters
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
@@ -24,21 +25,42 @@ func NewLinkStateAdapter(logger *slog.Logger) ports.LinkStatePort {
 	}
 }
 
-func (a *LinkStateAdapter) Fetch(url *url.URL) (*domain.Snapshot, error) {
-	switch url.Hostname() {
+func (a *LinkStateAdapter) Fetch(ctx context.Context, link domain.Link) (model.LinkState, error) {
+	switch link.URL.Hostname() {
 	case "github.com":
-		ghDTO, err := a.ghClient.FetchRepo(url)
-		if err != nil {
-			return nil, err
+		isGH, ghinfo := link.GitHubURLInfo()
+		if !isGH {
+			return model.LinkState{}, fmt.Errorf(
+				"%w: exected valid GitHubURLInfo", ports.ErrBadParams,
+			)
 		}
-		return domain.NewSnapshot(url, ghDTO.UpdatedAt, ghDTO.Name)
+		ghDTO, err := a.ghClient.FetchRepo(*ghinfo)
+		if err != nil {
+			return model.LinkState{}, err
+		}
+		return model.LinkState{
+			Fingerprint: "abcd",
+			UpdatedAt:   ghDTO.UpdatedAt,
+			Title:       ghDTO.Name,
+		}, nil
 	case "stackoverflow.com":
-		stoverflowDTO, err := a.stackoverflowClient.FetchQuestion(url)
-		if err != nil {
-			return nil, err
+		isSt, stinfo := link.StackoverflowURLInfo()
+		if !isSt {
+			return model.LinkState{}, fmt.Errorf(
+				"%w: expected valid StackoverflowURLInfo",
+				ports.ErrBadParams,
+			)
 		}
-		return domain.NewSnapshot(url, stoverflowDTO.LastActivityDate, stoverflowDTO.Title)
+		stoverflowDTO, err := a.stackoverflowClient.FetchQuestion(*stinfo)
+		if err != nil {
+			return model.LinkState{}, err
+		}
+		return model.LinkState{
+			Fingerprint: "abcd",
+			UpdatedAt:   stoverflowDTO.LastActivityDate,
+			Title:       stoverflowDTO.Title,
+		}, nil
 	default:
-		return nil, fmt.Errorf("%w: url: %s", ports.ErrBadURL, url.String())
+		return model.LinkState{}, fmt.Errorf("%w: url: %s", ports.ErrBadURL, link.URL.String())
 	}
 }
