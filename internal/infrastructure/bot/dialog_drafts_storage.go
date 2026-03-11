@@ -1,7 +1,9 @@
 package bot
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/repository"
@@ -25,14 +27,14 @@ func newDialogDraftsStorage(logger *slog.Logger) repository.DialogDraftsReposito
 func (st *dialogDraftsStorage) StartFilling(chatID int64) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if _, ok := st.storage[chatID]; ok {
-		return repository.ErrDialogAlreadyStarted
-	}
 	st.storage[chatID] = model.TrackLinkCmd{}
 	return nil
 }
 
 func (st *dialogDraftsStorage) AddURL(chatID int64, rawURL string) error {
+	if !validURL(rawURL) {
+		return fmt.Errorf("invalid url: %s", rawURL)
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if _, ok := st.storage[chatID]; !ok {
@@ -47,7 +49,7 @@ func (st *dialogDraftsStorage) AddURL(chatID int64, rawURL string) error {
 func (st *dialogDraftsStorage) AddTags(chatID int64, tags []string) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if _, ok := st.storage[chatID]; !ok {
+	if draft, ok := st.storage[chatID]; !ok || draft.RawURL == "" {
 		return repository.ErrDialogWasntStarted
 	}
 	st.storage[chatID] = model.TrackLinkCmd{
@@ -79,4 +81,10 @@ func (st *dialogDraftsStorage) ResetFilling(chatID int64) error {
 	}
 	delete(st.storage, chatID)
 	return nil
+}
+
+func validURL(rawURL string) bool {
+	return strings.Contains(rawURL, ".") &&
+		strings.Contains(rawURL, "/") &&
+		!strings.Contains(rawURL, " ")
 }

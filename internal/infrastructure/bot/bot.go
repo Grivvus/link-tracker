@@ -80,12 +80,12 @@ func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update
 				ChatID: update.Message.Chat.ID,
 				Text:   "А мы про тебя уже все знаем!",
 			})
-		} else {
-			b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: update.Message.Chat.ID,
-				Text:   "Не получилось зарегистрировать чат, попробуй позже",
-			})
+			return
 		}
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Не получилось зарегистрировать чат, попробуй позже",
+		})
 		return
 	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
@@ -110,6 +110,10 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 	case Default:
 		err := bapp.dialogStorage.StartFilling(chatID)
 		if err != nil {
+			bapp.logger.Error(
+				"Dialog filling failed",
+				"chat", chatID, "error", err,
+			)
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   "Не могу начать добавление ссылки, попробуйте позже",
@@ -147,7 +151,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			)
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "Не получилсоь добавить ссылку, попробуйте начать сначала",
+				Text:   "Не получилось добавить ссылку - проверьте корректность ссылки и попробуйте начать сначала",
 			})
 			bapp.fsm.Reset(userID)
 			return

@@ -88,7 +88,7 @@ func (l *Link) StackoverflowURLInfo() (bool, *StackoverflowURLInfo) {
 }
 
 func fetchGitHubInfo(url *url.URL) (GitHubURLInfo, error) {
-	parts := strings.Split(url.Path, "/")
+	parts := strings.Split(url.Path[1:], "/")
 	if len(parts) != 2 {
 		return GitHubURLInfo{}, ErrBadURL
 	}
@@ -99,7 +99,7 @@ func fetchGitHubInfo(url *url.URL) (GitHubURLInfo, error) {
 }
 
 func fetchStackoverflowInfo(url *url.URL) (StackoverflowURLInfo, error) {
-	parts := strings.Split(url.Path, "/")
+	parts := strings.Split(url.Path[1:], "/")
 	if len(parts) != 1 {
 		return StackoverflowURLInfo{}, ErrBadURL
 	}

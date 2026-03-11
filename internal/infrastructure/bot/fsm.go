@@ -32,7 +32,7 @@ func StartCallback(f *fsm.FSM, args ...any) {
 	slog.Info("Start callback was called for", "chat", chatID)
 	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   "Начата процедура добавления ссылки. Для отмены используйте /cancel",
+		Text:   "Для отмены используйте /cancel. Начата процедура добавления ссылки, введите url, который хотите отслеживать.",
 	})
 }
 

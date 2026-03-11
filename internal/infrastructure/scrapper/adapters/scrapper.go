@@ -96,15 +96,18 @@ func (s *ScrapperAdapter) AddLink(
 ) (model.TrackedLinkView, error) {
 	link, err := domain.NewLink(cmd.RawURL)
 	if err != nil {
+		slog.Error("", "err", err)
 		// always domain.ErrBadUrl
 		return model.TrackedLinkView{}, fmt.Errorf(
-			"%w: link is a not valid url", ports.ErrBadParams,
+			"%w: can't fetch all data from url, may be invalid", ports.ErrBadParams,
 		)
 	}
 	sub, err := s.subscriptionRepo.Subscribe(ctx, link, cmd.ChatID, cmd.Tags)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntityAlreadyExists) {
 			return model.TrackedLinkView{}, ports.ErrLinkAlreadyTracked
+		} else if errors.Is(err, repository.ErrEntityNotFound) {
+			return model.TrackedLinkView{}, ports.ErrNoChatWithThisID
 		}
 
 		return model.TrackedLinkView{}, errors.New("unexpected error")

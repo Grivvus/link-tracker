@@ -138,6 +138,7 @@ func (s *ScrapperServer) PostLinks(
 			"can't add new link",
 			"err", err,
 			"for chat", params.TgChatId,
+			"url", linkData.Link,
 		)
 		if errors.Is(err, ports.ErrBadParams) {
 			http.Error(w, "invalid request parameters", http.StatusBadRequest)
