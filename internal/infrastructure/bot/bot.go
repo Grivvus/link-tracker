@@ -37,6 +37,7 @@ list - Выводит отслеживаемые ссылки,
 	msgTrackInvalidURL      = "Не получилось добавить ссылку - проверьте корректность ссылки и попробуйте начать сначала"
 	msgTrackBadTags         = "Не получилось добавить теги, проверьте формат и повторите их ввод"
 	msgTrackInternalFailure = "что-то пошло не так, введите ссылку заново"
+	msgLinkAlreadyTracked   = "ссылка уже отслеживается"
 	msgTrackSaveFailed      = "не получилось сохранить добавленную ссылку, попробуйте позже"
 	msgTrackSaveOK          = "Ссылка была успешно сохранена"
 
@@ -222,10 +223,17 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		}
 		_, err = bapp.scrapperPort.AddLink(ctx, completedLink)
 		if err != nil {
-			b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chatID,
-				Text:   msgTrackSaveFailed,
-			})
+			if errors.Is(err, ports.ErrLinkAlreadyTracked) {
+				b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID: chatID,
+					Text:   msgLinkAlreadyTracked,
+				})
+			} else {
+				b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID: chatID,
+					Text:   msgTrackSaveFailed,
+				})
+			}
 			bapp.fsm.Reset(userID)
 			return
 		}
