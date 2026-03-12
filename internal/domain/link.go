@@ -86,7 +86,11 @@ func (l *Link) StackoverflowURLInfo() (bool, *StackoverflowURLInfo) {
 }
 
 func fetchGitHubInfo(url *url.URL) (GitHubURLInfo, error) {
-	parts := strings.Split(url.Path[1:], "/")
+	path := url.Path
+	path, _ = strings.CutSuffix(path, "/")
+	path, _ = strings.CutPrefix(path, "/")
+	parts := strings.Split(path, "/")
+	// /User/reponame
 	if len(parts) != 2 {
 		return GitHubURLInfo{}, ErrBadURL
 	}
@@ -97,11 +101,15 @@ func fetchGitHubInfo(url *url.URL) (GitHubURLInfo, error) {
 }
 
 func fetchStackoverflowInfo(url *url.URL) (StackoverflowURLInfo, error) {
-	parts := strings.Split(url.Path[1:], "/")
-	if len(parts) != 1 {
+	path := url.Path
+	path, _ = strings.CutSuffix(path, "/")
+	path, _ = strings.CutPrefix(path, "/")
+	parts := strings.Split(path, "/")
+	// /questions/{id}
+	if len(parts) != 2 {
 		return StackoverflowURLInfo{}, ErrBadURL
 	}
-	qid, err := strconv.Atoi(parts[0])
+	qid, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return StackoverflowURLInfo{}, fmt.Errorf(
 			"%w: can't convert question_id to int", ErrBadURL,
@@ -116,6 +124,11 @@ func parseAndValidateURL(rawURL string) (*url.URL, linkType, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, 0, err
+	}
+	// so github.com/User/repo also valid
+	if parsed.Scheme == "" {
+		rawURL = "https://" + rawURL
+		parsed, _ = url.Parse(rawURL)
 	}
 	if parsed.Scheme != "https" && parsed.Scheme != "http" {
 		return nil, 0, fmt.Errorf("%w: scheme must be http or https", ErrBadURL)
