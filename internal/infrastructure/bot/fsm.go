@@ -32,7 +32,10 @@ func StartCallback(f *fsm.FSM, args ...any) {
 	slog.Info("Start callback was called for", "chat", chatID)
 	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   "Для отмены используйте /cancel. Начата процедура добавления ссылки, введите url, который хотите отслеживать.",
+		Text: `
+Для отмены используйте /cancel.
+Начата процедура добавления ссылки, введите url, который хотите отслеживать.
+`,
 	})
 }
 
@@ -45,7 +48,11 @@ func AskLinkCallback(f *fsm.FSM, args ...any) {
 	slog.Info("AskLink callback was called for", "chat", chatID)
 	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   "Ссылка добавлена, теперь вы можете прикрепить теги к отслеживаемой ссылке.",
+		Text: `
+Ссылка добавлена, теперь вы можете прикрепить теги к отслеживаемой ссылке.
+Формат: "tag,tag,tag".
+Если не хотите добавлять теги, используйте -.
+`,
 	})
 }
 

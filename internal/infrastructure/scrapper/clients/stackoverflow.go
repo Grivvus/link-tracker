@@ -36,6 +36,7 @@ func (c *StackoverflowClient) FetchQuestion(
 			"%w: %w", ports.ErrBadParams, err,
 		)
 	}
+	c.logger.Info("request was built", "url", req.URL.String())
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.logger.Error(
@@ -46,6 +47,7 @@ func (c *StackoverflowClient) FetchQuestion(
 		)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	c.logger.Info("got response", "code", resp.StatusCode)
 	if resp.StatusCode >= 400 {
 		c.logger.Error(
 			"getting error-response",

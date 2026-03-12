@@ -35,6 +35,7 @@ func (g *GitHubClient) FetchRepo(
 			"%w: %w", ports.ErrBadParams, err,
 		)
 	}
+	g.logger.Info("request was built", "url", req.URL.String())
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
 	resp, err := g.httpClient.Do(req)
@@ -45,6 +46,7 @@ func (g *GitHubClient) FetchRepo(
 		)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	g.logger.Info("got response", "code", resp.StatusCode)
 	if resp.StatusCode >= 400 {
 		g.logger.Error(
 			"getting error-response",

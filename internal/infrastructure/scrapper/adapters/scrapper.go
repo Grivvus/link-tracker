@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -34,11 +33,11 @@ func NewScrapperAdapter(
 func (s *ScrapperAdapter) DeleteLink(
 	ctx context.Context, cmd model.UntrackLinkCmd,
 ) (model.TrackedLinkView, error) {
-	parsedURL, err := url.Parse(cmd.RawURL)
+	parsed, err := domain.NewLink(cmd.RawURL)
 	if err != nil {
-		return model.TrackedLinkView{}, fmt.Errorf("%w: link is a not valid url", ports.ErrBadParams)
+		return model.TrackedLinkView{}, ports.ErrBadURL
 	}
-	link, err := s.subscriptionRepo.FindLinkByURL(ctx, parsedURL)
+	link, err := s.subscriptionRepo.FindLinkByURL(ctx, parsed.URL)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntityNotFound) {
 			return model.TrackedLinkView{}, fmt.Errorf(

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/go-telegram/bot"
@@ -21,7 +22,11 @@ const (
 	startMsgText   = "Привет! Это Бот link-tracker, для получения информации о всех командах, используйте /help"
 	helpMsgText    = `
 start - Выводит приветственное сообщение,
-help - Выводит этот текст
+help - Выводит этот текст,
+track - Начинает процедуру добавления ссылки для отслеживания,
+cancel - Прерывает начатую процедуру добавления,
+untrack - Удаляет отслеживаемую ссылку по ее названию,
+list - Выводит отслеживаемые ссылки,
 	`
 )
 
@@ -160,7 +165,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 	case AskLink:
 		tags := update.Message.Text
 		var tagsSplited []string
-		if tags == "" {
+		if tags == "" || tags == "-" {
 			tagsSplited = make([]string, 0)
 		} else {
 			tagsSplited = strings.Split(tags, ",")
@@ -270,6 +275,17 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("List handler was called for", "chat", update.Message.Chat.ID)
 	chatID := update.Message.Chat.ID
+	var filter string
+	words := strings.Split(update.Message.Text, " ")
+	if len(words) >= 2 {
+		filter = words[1]
+		if len(words) > 2 {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "Множественные фильтры по тегам не поддерживаются, будет использован первый фильтр",
+			})
+		}
+	}
 	resp, err := bapp.scrapperPort.GetTrackedLinks(ctx, model.ListTrackedLinksQuery{
 		ChatID: chatID,
 	})
@@ -288,17 +304,31 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 		})
 		return
 	}
-	var sb strings.Builder
-	for _, link := range resp {
-		sb.WriteString(fmt.Sprintf("%s, tags: %v\n", link.RawURL, link.Tags))
-	}
-	if len(resp) == 0 {
-		sb.WriteString("Нет отслеживаемых ссылок\n")
-	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   sb.String(),
+		Text:   buildListAnswer(resp, filter),
 	})
+}
+
+func buildListAnswer(resp []model.TrackedLinkView, tagFilter string) string {
+	if len(resp) == 0 {
+		return "Нет отслеживаемых ссылок"
+	}
+	var sb strings.Builder
+	for _, link := range resp {
+		if tagFilter != "" && !slices.Contains(link.Tags, tagFilter) {
+			continue
+		}
+		sb.WriteString(link.RawURL)
+		sb.WriteString(" tags: ")
+		sb.WriteString(fmt.Sprintf("%v", link.Tags))
+		sb.WriteString("\r\n")
+	}
+	msg := sb.String()
+	if len(msg) == 0 {
+		return "Нет ссылок, удовлетворяющих фильтру"
+	}
+	return msg
 }
 
 func appInit(ctx context.Context, app *BotApplication) {

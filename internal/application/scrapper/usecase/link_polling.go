@@ -44,14 +44,16 @@ func NewLinkPollingUseCase(
 
 func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 	_, err := poller.sched.NewJob(
-		gocron.DurationJob(1*time.Hour),
+		gocron.DurationJob(10*time.Minute),
 		gocron.NewTask(func() {
+			poller.logger.Info("Start polling job")
 			links, err := poller.subscriptionRepository.GetAllLinks(ctx)
 			if err != nil {
 				// for now always nil
 				return
 			}
 			for _, link := range links {
+				poller.logger.Info("Fetch link", "url", link.URL)
 				go func(link domain.Link) {
 					subs, err := poller.subscriptionRepository.AllLinkSubscriptions(ctx, link)
 					if err != nil {
