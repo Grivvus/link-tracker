@@ -27,7 +27,34 @@ track - Начинает процедуру добавления ссылки д
 cancel - Прерывает начатую процедуру добавления,
 untrack - Удаляет отслеживаемую ссылку по ее названию,
 list - Выводит отслеживаемые ссылки,
-	`
+		`
+	msgChatAlreadyRegistered = "А мы про тебя уже все знаем!"
+	msgChatRegisterFailed    = "Не получилось зарегистрировать чат, попробуй позже"
+	msgChatRegisteredOK      = "Чат был успешно зарегистрирован"
+
+	msgTrackStartFailed     = "Не могу начать добавление ссылки, попробуйте позже"
+	msgTrackAlreadyStarted  = "Неправильное использование команды /track, ввод ссылки уже был начат"
+	msgTrackInvalidURL      = "Не получилось добавить ссылку - проверьте корректность ссылки и попробуйте начать сначала"
+	msgTrackBadTags         = "Не получилось добавить теги, проверьте формат и повторите их ввод"
+	msgTrackInternalFailure = "что-то пошло не так, введите ссылку заново"
+	msgTrackSaveFailed      = "не получилось сохранить добавленную ссылку, попробуйте позже"
+	msgTrackSaveOK          = "Ссылка была успешно сохранена"
+
+	msgCancelAlreadyReset = "Состояние уже сброшено"
+	msgCancelResetOK      = "Состояние было сброшено. Можете начать диалог заново."
+
+	msgUntrackUsage = "Неправильное использование: формат - '/untrack ссылка_для_удаления'"
+	msgBadParams    = "Некорректные параметры запроса"
+	msgNoLink       = "Такой ссылки не существует"
+	msgNoChat       = "Вы еще не зарегистрировались, воспользуйтесь командой /start"
+	msgUnexpected   = "Что-то пошло не так, попробуйте повторить свой запрос позже"
+	msgUntrackFmt   = "Ссылка '%s' была успешно удалена"
+
+	msgListTooManyFilters = "Множественные фильтры по тегам не поддерживаются, будет использован первый фильтр"
+	msgListUnexpected     = "Что-то пошло не так, попробуйте повторить запрос позже"
+	msgNoTrackedLinks     = "Нет отслеживаемых ссылок"
+	msgNoFilteredLinks    = "Нет ссылок, удовлетворяющих фильтру"
+	msgListLineFmt        = "%s tags: %v\r\n"
 )
 
 type BotApplication struct {
@@ -83,19 +110,19 @@ func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update
 		if errors.Is(err, ports.ErrChatAlreadyExist) {
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
-				Text:   "А мы про тебя уже все знаем!",
+				Text:   msgChatAlreadyRegistered,
 			})
 			return
 		}
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "Не получилось зарегистрировать чат, попробуй позже",
+			Text:   msgChatRegisterFailed,
 		})
 		return
 	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   "Чат был успешно зарегистрирован",
+		Text:   msgChatRegisteredOK,
 	})
 }
 
@@ -121,7 +148,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 			)
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "Не могу начать добавление ссылки, попробуйте позже",
+				Text:   msgTrackStartFailed,
 			})
 			bapp.fsm.Reset(userID)
 			return
@@ -135,7 +162,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 		)
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Неправильное использование команды /track, ввод ссылки уже был начат",
+			Text:   msgTrackAlreadyStarted,
 		})
 		bapp.fsm.Reset(userID)
 	}
@@ -156,7 +183,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			)
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "Не получилось добавить ссылку - проверьте корректность ссылки и попробуйте начать сначала",
+				Text:   msgTrackInvalidURL,
 			})
 			bapp.fsm.Reset(userID)
 			return
@@ -174,7 +201,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		if err != nil {
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "Не получилось добавить теги, проверьте формат и повторите их ввод",
+				Text:   msgTrackBadTags,
 			})
 			return
 		}
@@ -188,7 +215,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			)
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "что-то пошло не так, введите ссылку заново",
+				Text:   msgTrackInternalFailure,
 			})
 			bapp.fsm.Reset(userID)
 			return
@@ -197,14 +224,14 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		if err != nil {
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "не получилось сохранить добавленную ссылку, попробуйте позже",
+				Text:   msgTrackSaveFailed,
 			})
 			bapp.fsm.Reset(userID)
 			return
 		}
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Ссылка была успешно сохранена",
+			Text:   msgTrackSaveOK,
 		})
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
 	default:
@@ -224,13 +251,13 @@ func (bapp *BotApplication) CancelHandler(ctx context.Context, b *bot.Bot, updat
 	if bapp.fsm.Current(userID) == Default {
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Состояние уже сброшено",
+			Text:   msgCancelAlreadyReset,
 		})
 	} else {
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Состояние было сброшено. Можете начать диалог заново.",
+			Text:   msgCancelResetOK,
 		})
 	}
 }
@@ -242,7 +269,7 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	if len(textWords) != 2 {
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "Неправильное использование: формат - '/untrack ссылка_для_удаления'",
+			Text:   msgUntrackUsage,
 		})
 		return
 	}
@@ -252,13 +279,13 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	if err != nil {
 		var msgOnErr string
 		if errors.Is(err, ports.ErrBadParams) {
-			msgOnErr = "Некорректные параметры запроса"
+			msgOnErr = msgBadParams
 		} else if errors.Is(err, ports.ErrNoLink) {
-			msgOnErr = "Такой ссылки не существует"
+			msgOnErr = msgNoLink
 		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
-			msgOnErr = "Вы еще не зарегистрировались, воспользуйтесь командой /start"
+			msgOnErr = msgNoChat
 		} else {
-			msgOnErr = "Что-то пошло не так, попробуйте повторить свой запрос позже"
+			msgOnErr = msgUnexpected
 		}
 
 		b.SendMessage(ctx, &bot.SendMessageParams{
@@ -268,7 +295,7 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   fmt.Sprintf("Ссылка '%s' была успешно удалена", resp.RawURL),
+		Text:   fmt.Sprintf(msgUntrackFmt, resp.RawURL),
 	})
 }
 
@@ -282,7 +309,7 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 		if len(words) > 2 {
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   "Множественные фильтры по тегам не поддерживаются, будет использован первый фильтр",
+				Text:   msgListTooManyFilters,
 			})
 		}
 	}
@@ -292,11 +319,11 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 	if err != nil {
 		var msgOnErr string
 		if errors.Is(err, ports.ErrBadParams) {
-			msgOnErr = "Некорректные параметры запроса"
+			msgOnErr = msgBadParams
 		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
-			msgOnErr = "Вы еще не зарегистрировались, воспользуйтесь командой /start"
+			msgOnErr = msgNoChat
 		} else {
-			msgOnErr = "Что-то пошло не так, попробуйте повторить запрос позже"
+			msgOnErr = msgListUnexpected
 		}
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
@@ -312,21 +339,18 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 
 func buildListAnswer(resp []model.TrackedLinkView, tagFilter string) string {
 	if len(resp) == 0 {
-		return "Нет отслеживаемых ссылок"
+		return msgNoTrackedLinks
 	}
 	var sb strings.Builder
 	for _, link := range resp {
 		if tagFilter != "" && !slices.Contains(link.Tags, tagFilter) {
 			continue
 		}
-		sb.WriteString(link.RawURL)
-		sb.WriteString(" tags: ")
-		sb.WriteString(fmt.Sprintf("%v", link.Tags))
-		sb.WriteString("\r\n")
+		sb.WriteString(fmt.Sprintf(msgListLineFmt, link.RawURL, link.Tags))
 	}
 	msg := sb.String()
 	if len(msg) == 0 {
-		return "Нет ссылок, удовлетворяющих фильтру"
+		return msgNoFilteredLinks
 	}
 	return msg
 }
