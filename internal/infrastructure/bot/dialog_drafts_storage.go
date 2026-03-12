@@ -3,11 +3,11 @@ package bot
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
 type dialogDraftsStorage struct {
@@ -32,7 +32,8 @@ func (st *dialogDraftsStorage) StartFilling(chatID int64) error {
 }
 
 func (st *dialogDraftsStorage) AddURL(chatID int64, rawURL string) error {
-	if !validURL(rawURL) {
+	link, err := domain.NewLink(rawURL)
+	if err != nil {
 		return fmt.Errorf("invalid url: %s", rawURL)
 	}
 	st.mu.Lock()
@@ -41,7 +42,7 @@ func (st *dialogDraftsStorage) AddURL(chatID int64, rawURL string) error {
 		return repository.ErrDialogWasntStarted
 	}
 	st.storage[chatID] = model.TrackLinkCmd{
-		RawURL: rawURL,
+		RawURL: link.URL.String(),
 	}
 	return nil
 }
@@ -81,10 +82,4 @@ func (st *dialogDraftsStorage) ResetFilling(chatID int64) error {
 	}
 	delete(st.storage, chatID)
 	return nil
-}
-
-func validURL(rawURL string) bool {
-	return strings.Contains(rawURL, ".") &&
-		strings.Contains(rawURL, "/") &&
-		!strings.Contains(rawURL, " ")
 }

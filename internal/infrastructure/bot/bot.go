@@ -293,7 +293,7 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 		sb.WriteString(fmt.Sprintf("%s, tags: %v\n", link.RawURL, link.Tags))
 	}
 	if len(resp) == 0 {
-		sb.WriteString("No links yet\n")
+		sb.WriteString("Нет отслеживаемых ссылок\n")
 	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,

@@ -37,16 +37,16 @@ type StackoverflowURLInfo struct {
 }
 
 func NewLink(rawURL string) (Link, error) {
-	parsed, err := url.Parse(rawURL)
+	parsed, lType, err := parseAndValidateURL(rawURL)
 	if err != nil {
 		return Link{}, fmt.Errorf("%w: url has invalid format", ErrBadURL)
 	}
 	var (
-		lType     linkType
 		ghURLInfo *GitHubURLInfo
 		stURLInfo *StackoverflowURLInfo
 	)
-	if strings.Contains(rawURL, "github") {
+	switch lType {
+	case githubLink:
 		ghinfo, err := fetchGitHubInfo(parsed)
 		if err != nil {
 			return Link{}, fmt.Errorf(
@@ -55,8 +55,7 @@ func NewLink(rawURL string) (Link, error) {
 			)
 		}
 		ghURLInfo = &ghinfo
-		lType = githubLink
-	} else if strings.Contains(rawURL, "stackoverflow") {
+	case stackoverflowLink:
 		stinfo, err := fetchStackoverflowInfo(parsed)
 		if err != nil {
 			return Link{}, fmt.Errorf(
@@ -64,10 +63,9 @@ func NewLink(rawURL string) (Link, error) {
 				err,
 			)
 		}
-		lType = stackoverflowLink
 		stURLInfo = &stinfo
-	} else {
-		return Link{}, fmt.Errorf("%w: service is not supported", ErrBadURL)
+	default:
+		return Link{}, fmt.Errorf("%w: unkown link type", ErrBadURL)
 	}
 	return Link{
 		ID:         0,
@@ -112,4 +110,21 @@ func fetchStackoverflowInfo(url *url.URL) (StackoverflowURLInfo, error) {
 	return StackoverflowURLInfo{
 		QuestionID: int64(qid),
 	}, nil
+}
+
+func parseAndValidateURL(rawURL string) (*url.URL, linkType, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, 0, err
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return nil, 0, fmt.Errorf("%w: scheme must be http or https", ErrBadURL)
+	}
+	if parsed.Hostname() == "github.com" {
+		return parsed, githubLink, nil
+	}
+	if parsed.Hostname() == "stackoverflow.com" {
+		return parsed, stackoverflowLink, nil
+	}
+	return nil, 0, fmt.Errorf("%w: unknown url, host doesn't supported", ErrBadURL)
 }
