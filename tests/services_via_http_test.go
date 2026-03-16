@@ -98,10 +98,7 @@ func (s *ServicesHTTPTestSuite) doRequest(
 	body []byte,
 	headers map[string]string,
 ) (*http.Response, []byte) {
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
-	}
+	bodyReader := bytes.NewReader(body)
 	req, err := http.NewRequest(method, s.scrapperServiceURL()+path, bodyReader)
 	s.NoError(err)
 	for k, v := range headers {
