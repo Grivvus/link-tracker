@@ -41,3 +41,14 @@ generate-api:
 	@go tool oapi-codegen -generate "types" -package bot bot-api.yml > internal/infrastructure/openapi/bot/types.gen.go
 	@go tool oapi-codegen -generate "std-http-server" -package bot bot-api.yml > internal/infrastructure/openapi/bot/server.gen.go
 	@go tool oapi-codegen -generate "client" -package bot bot-api.yml > internal/infrastructure/openapi/bot/client.gen.go
+
+.PHONY: generate-grpc
+generate-grpc:
+	@echo "generating scrapper grpc client, server and types"
+	@protoc --go_out=internal/infrastructure/ --go_opt=paths=source_relative \
+            --go-grpc_out=internal/infrastructure/ --go-grpc_opt=paths=source_relative \
+            grpc/scrapper/scrapper.proto
+	@echo "generating bot grpc client, server and types"
+	@protoc --go_out=internal/infrastructure/ --go_opt=paths=source_relative \
+            --go-grpc_out=internal/infrastructure/ --go-grpc_opt=paths=source_relative \
+            grpc/bot/bot.proto
