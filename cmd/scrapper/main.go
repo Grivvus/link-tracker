@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,22 +13,58 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/usecase"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
+	botpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
+	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(
 		os.Stdout, &slog.HandlerOptions{AddSource: true},
 	))
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
 		logger.Error("can't load config", "err", err)
 		os.Exit(1)
 	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.ScrapperGRPCPort))
+	if err != nil {
+		logger.Error("can't create tcp listener", "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = lis.Close() }()
+	grpcServer := grpc.NewServer()
+	defer grpcServer.GracefulStop()
+
+	grpcClient, err := grpc.NewClient(
+		fmt.Sprintf("%v:%v", cfg.BotHost, cfg.BotGRPCPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		const msg = "can't create grpc client"
+		if cfg.UseGRPC {
+			logger.Error(msg, "err", err)
+			os.Exit(1)
+		}
+		logger.Warn(msg, "err", err)
+	}
+	defer func() {
+		if grpcClient != nil {
+			_ = grpcClient.Close()
+		}
+	}()
+	grpcBotClient := botpb.NewBotClient(grpcClient)
 
 	hc := http.Client{}
 	client, err := bot.NewClient(cfg.BotURL, bot.WithHTTPClient(&hc))
@@ -34,22 +72,21 @@ func main() {
 		logger.Error("can't init bot http client", "err", err)
 		os.Exit(1)
 	}
-	botPort := adapters.NewBotAdapter(logger, client)
+	botPort := adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	_ = botPort // needed, when i implement notifier
 
 	chatRepo := storage.NewChatStorage()
 	subscriptionRepo := storage.NewSubscriptionStorage()
 	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subscriptionRepo)
-	var server scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
+	var httpServInterface scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
-	h := scrapper.HandlerFromMux(server, mux)
+	h := scrapper.HandlerFromMux(httpServInterface, mux)
 	httpServer := http.Server{
 		Addr:    cfg.ServerURL,
 		Handler: h,
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancel()
+	pb.RegisterScrapperServer(grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
 	linkStatePort := adapters.NewLinkStateAdapter(logger)
 
@@ -68,6 +105,14 @@ func main() {
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server exit with error", "err", err)
 		}
+	}()
+
+	go func() {
+		logger.Info("grpc server has been started on", "port", cfg.ScrapperGRPCPort)
+		if err := grpcServer.Serve(lis); err != nil {
+			logger.Error("grpc server exit with error", "err", err)
+		}
+		logger.Info("grpc server has been stopped")
 	}()
 
 	<-ctx.Done()

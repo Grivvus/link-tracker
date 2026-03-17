@@ -7,12 +7,14 @@ services:
       context: .
       dockerfile: Dockerfile.bot
     ports:
-      - 8000:8000
+      - "8000:8000"
+      - "50051:50051"
     restart: no
   scrapper:
     build:
       context: .
       dockerfile: Dockerfile.scrapper
     ports:
-      - 8001:8000
+      - "8001:8000"
+      - "50052:50051"
     restart: no

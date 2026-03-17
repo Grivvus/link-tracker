@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+option go_package = "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc";
+
+package bot;
+
+service Bot {
+  rpc NotifyAboutUpdate(LinkUpdate) returns (google.protobuf.Empty);
+}
+
+message LinkUpdate {
+  int64 id = 1;
+  string url = 2;
+  string description = 3;
+  repeated int64 tgChatIds = 4;
+}
