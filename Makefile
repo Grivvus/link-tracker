@@ -31,6 +31,11 @@ test:
 	@go test -coverpkg='gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/...' --race -count=1 -coverprofile='$(COVERAGE_FILE)' ./...
 	@go tool cover -func='$(COVERAGE_FILE)' | grep ^total | tr -s '\t'
 
+.PHONY: lint
+lint:
+	@echo "starting golangci-lint in docker"
+	@docker run -t --rm -v $$(pwd):/app -w /app golangci/golangci-lint:v2.11.3 golangci-lint run
+
 .PHONE: generate-api
 generate-api:
 	@echo "generating client, server and types for scrapper"
