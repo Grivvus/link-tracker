@@ -25,6 +25,11 @@ import (
 )
 
 func main() {
+	var exitCode = 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
 	logger := slog.New(slog.NewTextHandler(
 		os.Stdout, &slog.HandlerOptions{AddSource: true},
 	))
@@ -35,13 +40,16 @@ func main() {
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
 		logger.Error("can't load config", "err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.ScrapperGRPCPort))
+	var lisConf net.ListenConfig
+	lis, err := lisConf.Listen(ctx, "tcp", fmt.Sprintf(":%d", cfg.ScrapperGRPCPort))
 	if err != nil {
 		logger.Error("can't create tcp listener", "err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 	defer func() { _ = lis.Close() }()
 	grpcServer := grpc.NewServer()
@@ -55,7 +63,8 @@ func main() {
 		const msg = "can't create grpc client"
 		if cfg.UseGRPC {
 			logger.Error(msg, "err", err)
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
 		logger.Warn(msg, "err", err)
 	}
@@ -70,7 +79,8 @@ func main() {
 	client, err := bot.NewClient(cfg.BotURL, bot.WithHTTPClient(&hc))
 	if err != nil {
 		logger.Error("can't init bot http client", "err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 	botPort := adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	_ = botPort // needed, when i implement notifier
@@ -93,7 +103,8 @@ func main() {
 	sched, err := gocron.NewScheduler()
 	if err != nil {
 		logger.Error("can't init scheduler", "err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 	poller := usecase.NewLinkPollingUseCase(
 		logger, sched, linkStatePort, botPort, subscriptionRepo, chatRepo,

@@ -44,11 +44,12 @@ func (s *ScrapperServer) DeleteLinks(
 			"can't delete link",
 			"err", err, "for chat", params.TgChatId,
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			http.Error(w, "invalid request parameters", http.StatusBadRequest)
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) || errors.Is(err, ports.ErrNoLink) {
+		case errors.Is(err, ports.ErrNoChatWithThisID) || errors.Is(err, ports.ErrNoLink):
 			http.Error(w, "no chat with this id or no such link", http.StatusNotFound)
-		} else {
+		default:
 			http.Error(w, "unexpected error", http.StatusInternalServerError)
 		}
 		return
@@ -83,11 +84,12 @@ func (s *ScrapperServer) GetLinks(
 			"can't get links",
 			"err", err, "for chat", params.TgChatId,
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
+		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
@@ -140,13 +142,14 @@ func (s *ScrapperServer) PostLinks(
 			"for chat", params.TgChatId,
 			"url", linkData.Link,
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			http.Error(w, "invalid request parameters", http.StatusBadRequest)
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			http.Error(w, "no such chat", http.StatusNotFound)
-		} else if errors.Is(err, ports.ErrLinkAlreadyTracked) {
+		case errors.Is(err, ports.ErrLinkAlreadyTracked):
 			http.Error(w, "link already tracked", http.StatusConflict)
-		} else {
+		default:
 			http.Error(w, "unexpected error", http.StatusInternalServerError)
 		}
 		return
@@ -179,11 +182,12 @@ func (s *ScrapperServer) DeleteTgChatId(
 			"err", err,
 			"for chat", id,
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
+		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			s.log.Warn(
 				"unexpected error type or value",
@@ -206,11 +210,12 @@ func (s *ScrapperServer) PostTgChatId(
 			"err", err,
 			"for chat", id,
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if errors.Is(err, ports.ErrChatAlreadyExist) {
+		case errors.Is(err, ports.ErrChatAlreadyExist):
 			http.Error(w, err.Error(), http.StatusConflict)
-		} else {
+		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			s.log.Warn(
 				"unexpected error type or value",

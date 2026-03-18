@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -43,6 +44,42 @@ func (s *ScrapperAdapter) DeleteLink(
 	return s.httpDeleteLink(ctx, cmd)
 }
 
+func (s *ScrapperAdapter) GetTrackedLinks(
+	ctx context.Context, query model.ListTrackedLinksQuery,
+) ([]model.TrackedLinkView, error) {
+	if s.useGRPC {
+		return s.grpcGetTrackedLinks(ctx, query)
+	}
+	return s.httpGetTrackedLinks(ctx, query)
+}
+
+func (s *ScrapperAdapter) AddLink(
+	ctx context.Context, cmd model.TrackLinkCmd,
+) (model.TrackedLinkView, error) {
+	if s.useGRPC {
+		return s.grpcAddLink(ctx, cmd)
+	}
+	return s.httpAddLink(ctx, cmd)
+}
+
+func (s *ScrapperAdapter) DeleteTGChat(
+	ctx context.Context, chatID int64,
+) error {
+	if s.useGRPC {
+		return s.grpcDeleteTGChat(ctx, chatID)
+	}
+	return s.httpDeleteTGChat(ctx, chatID)
+}
+
+func (s *ScrapperAdapter) RegisterTGChat(
+	ctx context.Context, chatID int64,
+) error {
+	if s.useGRPC {
+		return s.grpcRegisterTGChat(ctx, chatID)
+	}
+	return s.httpRegisterTGChat(ctx, chatID)
+}
+
 func (s *ScrapperAdapter) httpDeleteLink(
 	ctx context.Context, cmd model.UntrackLinkCmd,
 ) (model.TrackedLinkView, error) {
@@ -61,11 +98,11 @@ func (s *ScrapperAdapter) httpDeleteLink(
 		return model.TrackedLinkView{}, fmt.Errorf("can't make a DeleteLinks request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		switch resp.StatusCode {
-		case 400:
+		case http.StatusBadRequest:
 			return model.TrackedLinkView{}, ports.ErrBadParams
-		case 404:
+		case http.StatusNotFound:
 			return model.TrackedLinkView{}, ports.ErrNoLink
 		default:
 			return model.TrackedLinkView{}, errors.New("unexpected error")
@@ -113,15 +150,6 @@ func (s *ScrapperAdapter) grpcDeleteLink(
 	}, nil
 }
 
-func (s *ScrapperAdapter) GetTrackedLinks(
-	ctx context.Context, query model.ListTrackedLinksQuery,
-) ([]model.TrackedLinkView, error) {
-	if s.useGRPC {
-		return s.grpcGetTrackedLinks(ctx, query)
-	}
-	return s.httpGetTrackedLinks(ctx, query)
-}
-
 func (s *ScrapperAdapter) httpGetTrackedLinks(
 	ctx context.Context, query model.ListTrackedLinksQuery,
 ) ([]model.TrackedLinkView, error) {
@@ -138,11 +166,11 @@ func (s *ScrapperAdapter) httpGetTrackedLinks(
 		return nil, fmt.Errorf("can't make a GetTrackedLinks request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		switch resp.StatusCode {
-		case 400:
+		case http.StatusBadRequest:
 			return nil, ports.ErrBadParams
-		case 404:
+		case http.StatusNotFound:
 			return nil, ports.ErrNoChatWithThisID
 		default:
 			return nil, errors.New("unexpected error")
@@ -204,15 +232,6 @@ func (s *ScrapperAdapter) grpcGetTrackedLinks(
 	return linksView, nil
 }
 
-func (s *ScrapperAdapter) AddLink(
-	ctx context.Context, cmd model.TrackLinkCmd,
-) (model.TrackedLinkView, error) {
-	if s.useGRPC {
-		return s.grpcAddLink(ctx, cmd)
-	}
-	return s.httpAddLink(ctx, cmd)
-}
-
 func (s *ScrapperAdapter) httpAddLink(
 	ctx context.Context, cmd model.TrackLinkCmd,
 ) (model.TrackedLinkView, error) {
@@ -231,13 +250,13 @@ func (s *ScrapperAdapter) httpAddLink(
 		return model.TrackedLinkView{}, errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		switch resp.StatusCode {
-		case 400:
+		case http.StatusBadRequest:
 			return model.TrackedLinkView{}, ports.ErrBadParams
-		case 404:
+		case http.StatusNotFound:
 			return model.TrackedLinkView{}, ports.ErrNoChatWithThisID
-		case 409:
+		case http.StatusConflict:
 			return model.TrackedLinkView{}, ports.ErrLinkAlreadyTracked
 		default:
 			return model.TrackedLinkView{}, errors.New("unexpected error")
@@ -286,15 +305,6 @@ func (s *ScrapperAdapter) grpcAddLink(
 	}, nil
 }
 
-func (s *ScrapperAdapter) DeleteTGChat(
-	ctx context.Context, chatID int64,
-) error {
-	if s.useGRPC {
-		return s.grpcDeleteTGChat(ctx, chatID)
-	}
-	return s.httpDeleteTGChat(ctx, chatID)
-}
-
 func (s *ScrapperAdapter) httpDeleteTGChat(
 	ctx context.Context, chatID int64,
 ) error {
@@ -308,11 +318,11 @@ func (s *ScrapperAdapter) httpDeleteTGChat(
 		return errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		switch resp.StatusCode {
-		case 400:
+		case http.StatusBadRequest:
 			return ports.ErrBadParams
-		case 404:
+		case http.StatusNotFound:
 			return ports.ErrNoChatWithThisID
 		default:
 			return errors.New("unexpected error")
@@ -339,15 +349,6 @@ func (s *ScrapperAdapter) grpcDeleteTGChat(
 	return nil
 }
 
-func (s *ScrapperAdapter) RegisterTGChat(
-	ctx context.Context, chatID int64,
-) error {
-	if s.useGRPC {
-		return s.grpcRegisterTGChat(ctx, chatID)
-	}
-	return s.httpRegisterTGChat(ctx, chatID)
-}
-
 func (s *ScrapperAdapter) httpRegisterTGChat(
 	ctx context.Context, chatID int64,
 ) error {
@@ -361,11 +362,11 @@ func (s *ScrapperAdapter) httpRegisterTGChat(
 		return errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		switch resp.StatusCode {
-		case 400:
+		case http.StatusBadRequest:
 			return ports.ErrBadParams
-		case 409:
+		case http.StatusNotFound:
 			return ports.ErrChatAlreadyExist
 		default:
 			return errors.New("unexpected error")

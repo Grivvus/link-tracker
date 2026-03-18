@@ -93,7 +93,7 @@ func New(
 
 func (bapp *BotApplication) DefaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Warn("Default handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   defaultMsgText,
 	})
@@ -101,7 +101,7 @@ func (bapp *BotApplication) DefaultHandler(ctx context.Context, b *bot.Bot, upda
 }
 
 func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   startMsgText,
 	})
@@ -109,19 +109,19 @@ func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update
 	err := bapp.scrapperPort.RegisterTGChat(ctx, update.Message.Chat.ID)
 	if err != nil {
 		if errors.Is(err, ports.ErrChatAlreadyExist) {
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   msgChatAlreadyRegistered,
 			})
 			return
 		}
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   msgChatRegisterFailed,
 		})
 		return
 	}
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   msgChatRegisteredOK,
 	})
@@ -129,7 +129,7 @@ func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update
 
 func (bapp *BotApplication) HelpHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("Help handler was called for", "chat", update.Message.Chat.ID)
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   helpMsgText,
 	})
@@ -147,7 +147,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 				"Dialog filling failed",
 				"chat", chatID, "error", err,
 			)
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackStartFailed,
 			})
@@ -161,7 +161,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 			"state", bapp.fsm.Current(userID),
 			"user", userID,
 		)
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgTrackAlreadyStarted,
 		})
@@ -182,7 +182,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 				"Failed to add URL",
 				"chat", chatID, "url", rawURL, "err", err,
 			)
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackInvalidURL,
 			})
@@ -200,7 +200,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		}
 		err := bapp.dialogStorage.AddTags(chatID, tagsSplited)
 		if err != nil {
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackBadTags,
 			})
@@ -214,7 +214,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 				"Failed to get filled tracking",
 				"chat", chatID, "err", err,
 			)
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackInternalFailure,
 			})
@@ -224,20 +224,19 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		_, err = bapp.scrapperPort.AddLink(ctx, completedLink)
 		if err != nil {
 			if errors.Is(err, ports.ErrLinkAlreadyTracked) {
-				b.SendMessage(ctx, &bot.SendMessageParams{
+				_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 					ChatID: chatID,
 					Text:   msgLinkAlreadyTracked,
 				})
-			} else {
-				b.SendMessage(ctx, &bot.SendMessageParams{
-					ChatID: chatID,
-					Text:   msgTrackSaveFailed,
-				})
 			}
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   msgTrackSaveFailed,
+			})
 			bapp.fsm.Reset(userID)
 			return
 		}
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgTrackSaveOK,
 		})
@@ -257,13 +256,13 @@ func (bapp *BotApplication) CancelHandler(ctx context.Context, b *bot.Bot, updat
 	userID := update.Message.From.ID
 	chatID := update.Message.Chat.ID
 	if bapp.fsm.Current(userID) == Default {
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgCancelAlreadyReset,
 		})
 	} else {
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgCancelResetOK,
 		})
@@ -275,7 +274,7 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	text := update.Message.Text
 	textWords := strings.Split(text, " ")
 	if len(textWords) != 2 {
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   msgUntrackUsage,
 		})
@@ -286,22 +285,23 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	})
 	if err != nil {
 		var msgOnErr string
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			msgOnErr = msgBadParams
-		} else if errors.Is(err, ports.ErrNoLink) {
+		case errors.Is(err, ports.ErrNoLink):
 			msgOnErr = msgNoLink
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			msgOnErr = msgNoChat
-		} else {
+		default:
 			msgOnErr = msgUnexpected
 		}
 
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID, Text: msgOnErr,
 		})
 		return
 	}
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   fmt.Sprintf(msgUntrackFmt, resp.RawURL),
 	})
@@ -315,7 +315,7 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 	if len(words) >= 2 {
 		filter = words[1]
 		if len(words) > 2 {
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgListTooManyFilters,
 			})
@@ -326,20 +326,21 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 	})
 	if err != nil {
 		var msgOnErr string
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			msgOnErr = msgBadParams
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			msgOnErr = msgNoChat
-		} else {
+		default:
 			msgOnErr = msgListUnexpected
 		}
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgOnErr,
 		})
 		return
 	}
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   buildListAnswer(resp, filter),
 	})
@@ -354,7 +355,7 @@ func buildListAnswer(resp []model.TrackedLinkView, tagFilter string) string {
 		if tagFilter != "" && !slices.Contains(link.Tags, tagFilter) {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf(msgListLineFmt, link.RawURL, link.Tags))
+		fmt.Fprintf(&sb, msgListLineFmt, link.RawURL, link.Tags)
 	}
 	msg := sb.String()
 	if len(msg) == 0 {
@@ -364,7 +365,7 @@ func buildListAnswer(resp []model.TrackedLinkView, tagFilter string) string {
 }
 
 func appInit(ctx context.Context, app *BotApplication) {
-	app.Bot.SetMyCommands(ctx, &bot.SetMyCommandsParams{
+	_, _ = app.Bot.SetMyCommands(ctx, &bot.SetMyCommandsParams{
 		Commands: []models.BotCommand{
 			{Command: "start", Description: "Начинает диалог с ботом"},
 			{Command: "help", Description: "Показывает этот текст"},

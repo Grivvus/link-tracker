@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -59,9 +60,9 @@ func (b *BotAdapter) httpNotify(
 		return errors.New("unexpected error")
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		switch resp.StatusCode {
-		case 400:
+		case http.StatusBadRequest:
 			return ports.ErrBadParams
 		default:
 			return errors.New("unexpected error")

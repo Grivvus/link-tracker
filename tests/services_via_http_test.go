@@ -32,7 +32,7 @@ func (s *ServicesHTTPTestSuite) SetupSuite() {
 	ctx := context.Background()
 	s.ctx = ctx
 	net, err := network.New(ctx, network.WithAttachable())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.net = net
 	botReq := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
@@ -58,26 +58,26 @@ func (s *ServicesHTTPTestSuite) SetupSuite() {
 		ContainerRequest: botReq,
 		Started:          true,
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	scrapperService, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: scrapperReq,
 		Started:          true,
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.botService = botService
 	s.scrapperService = scrapperService
 	s.botServiceURL = func() string {
 		botHost, err := botService.Host(ctx)
 		botPort, err1 := botService.MappedPort(ctx, "8000/tcp")
-		s.NoError(err)
-		s.NoError(err1)
+		s.Require().NoError(err)
+		s.Require().NoError(err1)
 		return strings.TrimSuffix(fmt.Sprintf("http://%v:%v", botHost, botPort), "/tcp")
 	}
 	s.scrapperServiceURL = func() string {
 		scrapperHost, err := scrapperService.Host(ctx)
 		scrapperPort, err1 := scrapperService.MappedPort(ctx, "8000/tcp")
-		s.NoError(err)
-		s.NoError(err1)
+		s.Require().NoError(err)
+		s.Require().NoError(err1)
 		return strings.TrimSuffix(fmt.Sprintf("http://%v:%v", scrapperHost, scrapperPort), "/tcp")
 	}
 }
@@ -86,91 +86,6 @@ func (s *ServicesHTTPTestSuite) TearDownSuite() {
 	s.net.Remove(s.ctx)
 	s.botService.Terminate(s.ctx)
 	s.scrapperService.Terminate(s.ctx)
-}
-
-func (s *ServicesHTTPTestSuite) nextChatID() int64 {
-	return atomic.AddInt64(&chatIDCounter, 1)
-}
-
-func (s *ServicesHTTPTestSuite) doRequest(
-	method string,
-	path string,
-	body []byte,
-	headers map[string]string,
-) (*http.Response, []byte) {
-	bodyReader := bytes.NewReader(body)
-	req, err := http.NewRequest(method, s.scrapperServiceURL()+path, bodyReader)
-	s.NoError(err)
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	s.NoError(err)
-	respBody, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	return resp, respBody
-}
-
-func (s *ServicesHTTPTestSuite) registerChat(chatID int64) *http.Response {
-	resp, _ := s.doRequest(
-		http.MethodPost,
-		fmt.Sprintf("/tg-chat/%d", chatID),
-		nil,
-		nil,
-	)
-	return resp
-}
-
-func (s *ServicesHTTPTestSuite) deleteChat(chatID int64) *http.Response {
-	resp, _ := s.doRequest(
-		http.MethodDelete,
-		fmt.Sprintf("/tg-chat/%d", chatID),
-		nil,
-		nil,
-	)
-	return resp
-}
-
-func (s *ServicesHTTPTestSuite) addLink(chatID int64, link string, tags []string) (*http.Response, []byte) {
-	payload, err := json.Marshal(map[string]any{
-		"link": link,
-		"tags": tags,
-	})
-	s.NoError(err)
-	resp, body := s.doRequest(
-		http.MethodPost,
-		"/links",
-		payload,
-		map[string]string{"Tg-Chat-Id": strconv.FormatInt(chatID, 10)},
-	)
-	return resp, body
-}
-
-func (s *ServicesHTTPTestSuite) deleteLink(chatID int64, link string) (*http.Response, []byte) {
-	payload, err := json.Marshal(map[string]any{
-		"link": link,
-	})
-	s.NoError(err)
-	resp, body := s.doRequest(
-		http.MethodDelete,
-		"/links",
-		payload,
-		map[string]string{"Tg-Chat-Id": strconv.FormatInt(chatID, 10)},
-	)
-	return resp, body
-}
-
-func (s *ServicesHTTPTestSuite) getLinks(chatID int64) (*http.Response, []byte) {
-	resp, body := s.doRequest(
-		http.MethodGet,
-		"/links",
-		nil,
-		map[string]string{"Tg-Chat-Id": strconv.FormatInt(chatID, 10)},
-	)
-	return resp, body
 }
 
 func (s *ServicesHTTPTestSuite) TestTgChat_RegisterAndDelete() {
@@ -218,7 +133,7 @@ func (s *ServicesHTTPTestSuite) TestLinks_ListAfterChatRegistration() {
 	s.Equal(http.StatusOK, resp.StatusCode, "getting links is OK for registered chat")
 	var parsed listLinksResponse
 	err := json.Unmarshal(body, &parsed)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(int32(0), parsed.Size, "expected no links for new chat")
 	s.Empty(parsed.Links, "expected empty links list for new chat")
 }
@@ -239,10 +154,10 @@ func (s *ServicesHTTPTestSuite) TestLinks_AddAndDelete() {
 	s.Equal(http.StatusOK, resp.StatusCode, "link should be added successfully")
 	var added linkResponse
 	err := json.Unmarshal(body, &added)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(link, added.URL, "added link url should match")
 	s.ElementsMatch(tags, added.Tags, "tags should match")
-	s.Greater(added.ID, int64(0), "link id should be set")
+	s.Positive(added.ID, "link id should be set")
 
 	resp, _ = s.addLink(chatID, link, tags)
 	s.Equal(http.StatusConflict, resp.StatusCode, "duplicate link should return 409")
@@ -251,7 +166,7 @@ func (s *ServicesHTTPTestSuite) TestLinks_AddAndDelete() {
 	s.Equal(http.StatusOK, resp.StatusCode, "getting links is OK for registered chat")
 	var listed listLinksResponse
 	err = json.Unmarshal(body, &listed)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Require().Equal(int32(1), listed.Size, "expected one tracked link")
 	s.Require().Len(listed.Links, 1, "expected one tracked link in response")
 	s.Equal(link, listed.Links[0].URL, "listed link url should match")
@@ -260,13 +175,13 @@ func (s *ServicesHTTPTestSuite) TestLinks_AddAndDelete() {
 	s.Equal(http.StatusOK, resp.StatusCode, "link should be deleted successfully")
 	var deleted linkResponse
 	err = json.Unmarshal(body, &deleted)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(link, deleted.URL, "deleted link url should match")
 
 	resp, body = s.getLinks(chatID)
 	s.Equal(http.StatusOK, resp.StatusCode, "getting links is OK after delete")
 	err = json.Unmarshal(body, &listed)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(int32(0), listed.Size, "expected no links after delete")
 	s.Empty(listed.Links, "expected empty links list after delete")
 }
@@ -296,9 +211,93 @@ func (s *ServicesHTTPTestSuite) TestLinks_AddFailsIfNotRegistered() {
 
 func (s *ServicesHTTPTestSuite) TestLinks_DeleteRequiresHeader() {
 	payload, err := json.Marshal(map[string]any{"link": "https://stackoverflow.com/questions/1"})
-	s.NoError(err)
+	s.Require().NoError(err)
 	resp, _ := s.doRequest(http.MethodDelete, "/links", payload, nil)
 	s.Equal(http.StatusBadRequest, resp.StatusCode, "missing Tg-Chat-Id header: expected 400")
+}
+
+func (s *ServicesHTTPTestSuite) nextChatID() int64 {
+	return atomic.AddInt64(&chatIDCounter, 1)
+}
+
+func (s *ServicesHTTPTestSuite) doRequest(
+	method string,
+	path string,
+	body []byte,
+	headers map[string]string,
+) (*http.Response, []byte) {
+	bodyReader := bytes.NewReader(body)
+	req, err := http.NewRequest(method, s.scrapperServiceURL()+path, bodyReader)
+	s.Require().NoError(err)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	s.Require().NoError(err)
+	respBody, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	return resp, respBody
+}
+
+func (s *ServicesHTTPTestSuite) registerChat(chatID int64) *http.Response {
+	resp, _ := s.doRequest(
+		http.MethodPost,
+		fmt.Sprintf("/tg-chat/%d", chatID),
+		nil,
+		nil,
+	)
+	return resp
+}
+
+func (s *ServicesHTTPTestSuite) deleteChat(chatID int64) *http.Response {
+	resp, _ := s.doRequest(
+		http.MethodDelete,
+		fmt.Sprintf("/tg-chat/%d", chatID),
+		nil,
+		nil,
+	)
+	return resp
+}
+
+func (s *ServicesHTTPTestSuite) addLink(chatID int64, link string, tags []string) (*http.Response, []byte) {
+	payload, err := json.Marshal(map[string]any{
+		"link": link,
+		"tags": tags,
+	})
+	s.Require().NoError(err)
+	resp, body := s.doRequest(
+		http.MethodPost,
+		"/links",
+		payload,
+		map[string]string{"Tg-Chat-Id": strconv.FormatInt(chatID, 10)},
+	)
+	return resp, body
+}
+func (s *ServicesHTTPTestSuite) getLinks(chatID int64) (*http.Response, []byte) {
+	resp, body := s.doRequest(
+		http.MethodGet,
+		"/links",
+		nil,
+		map[string]string{"Tg-Chat-Id": strconv.FormatInt(chatID, 10)},
+	)
+	return resp, body
+}
+
+func (s *ServicesHTTPTestSuite) deleteLink(chatID int64, link string) (*http.Response, []byte) {
+	payload, err := json.Marshal(map[string]any{
+		"link": link,
+	})
+	s.Require().NoError(err)
+	resp, body := s.doRequest(
+		http.MethodDelete,
+		"/links",
+		payload,
+		map[string]string{"Tg-Chat-Id": strconv.FormatInt(chatID, 10)},
+	)
+	return resp, body
 }
 
 func TestSuiteStart(t *testing.T) {

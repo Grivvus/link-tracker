@@ -38,12 +38,14 @@ func (s *ScrapperGRPCServer) RegisterChat(
 			"Failed to register chat",
 			"err", err, "for chat", in.GetId(),
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			return nil, status.Error(codes.InvalidArgument, err.Error())
-		} else if errors.Is(err, ports.ErrChatAlreadyExist) {
+		case errors.Is(err, ports.ErrChatAlreadyExist):
 			return nil, status.Error(codes.AlreadyExists, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -58,12 +60,14 @@ func (s *ScrapperGRPCServer) DeleteChat(
 			"Failed to register chat",
 			"err", err, "for chat", in.GetId(),
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			return nil, status.Error(codes.InvalidArgument, err.Error())
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			return nil, status.Error(codes.NotFound, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -117,14 +121,16 @@ func (s *ScrapperGRPCServer) AddLinkToTracking(
 			"for chat", in.ChatId.GetId(),
 			"url", in.Link,
 		)
-		if errors.Is(err, ports.ErrBadParams) {
+		switch {
+		case errors.Is(err, ports.ErrBadParams):
 			return nil, status.Error(codes.InvalidArgument, "invalid request parameters")
-		} else if errors.Is(err, ports.ErrNoChatWithThisID) {
+		case errors.Is(err, ports.ErrNoChatWithThisID):
 			return nil, status.Error(codes.NotFound, "no such chat")
-		} else if errors.Is(err, ports.ErrLinkAlreadyTracked) {
+		case errors.Is(err, ports.ErrLinkAlreadyTracked):
 			return nil, status.Error(codes.AlreadyExists, "link already tracked")
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &pb.LinkResponse{
 		Id:   trackedLink.LinkID,

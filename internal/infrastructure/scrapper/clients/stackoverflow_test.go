@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -12,27 +13,33 @@ import (
 func TestStackoverflowClient_FetchQuestion_Non2xxResponse(t *testing.T) {
 	client := NewStackoverflowClient(testClientLogger())
 	client.httpClient = &http.Client{
-		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusInternalServerError, `{"error":"internal"}`), nil
 		}),
 	}
 
-	_, err := client.FetchQuestion(domain.StackoverflowURLInfo{
-		QuestionID: 123,
-	})
+	_, err := client.FetchQuestion(
+		context.TODO(),
+		domain.StackoverflowURLInfo{
+			QuestionID: 123,
+		},
+	)
 	require.ErrorIs(t, err, ports.ErrBadResponse)
 }
 
 func TestStackoverflowClient_FetchQuestion_InvalidJSON(t *testing.T) {
 	client := NewStackoverflowClient(testClientLogger())
 	client.httpClient = &http.Client{
-		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusOK, `{"last_activity_date":"oops"`), nil
 		}),
 	}
 
-	_, err := client.FetchQuestion(domain.StackoverflowURLInfo{
-		QuestionID: 123,
-	})
+	_, err := client.FetchQuestion(
+		context.TODO(),
+		domain.StackoverflowURLInfo{
+			QuestionID: 123,
+		},
+	)
 	require.ErrorIs(t, err, ports.ErrBadResponse)
 }

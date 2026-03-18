@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
 
-const stackoverflowApiURL = "https://api.stackexchange.com/2.3/questions"
+const stackoverflowAPIURL = "https://api.stackexchange.com/2.3/questions"
 const stackoverflowSite = "stackoverflow"
 
 type StackoverflowClient struct {
@@ -27,9 +28,9 @@ func NewStackoverflowClient(logger *slog.Logger) *StackoverflowClient {
 }
 
 func (c *StackoverflowClient) FetchQuestion(
-	info domain.StackoverflowURLInfo,
+	ctx context.Context, info domain.StackoverflowURLInfo,
 ) (dto.StackoverflowQuestion, error) {
-	req, err := http.NewRequest(http.MethodGet, buildStackoverflowURL(info), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildStackoverflowURL(info), nil)
 	if err != nil {
 		c.logger.Error("error creating request", "url info", info)
 		return dto.StackoverflowQuestion{}, fmt.Errorf(
@@ -48,7 +49,7 @@ func (c *StackoverflowClient) FetchQuestion(
 	}
 	defer func() { _ = resp.Body.Close() }()
 	c.logger.Info("got response", "code", resp.StatusCode)
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		c.logger.Error(
 			"getting error-response",
 			"url info", info, "status_code", resp.StatusCode,
@@ -72,6 +73,6 @@ func (c *StackoverflowClient) FetchQuestion(
 
 func buildStackoverflowURL(info domain.StackoverflowURLInfo) string {
 	return fmt.Sprintf(
-		"%s/%d?%s", stackoverflowApiURL, info.QuestionID, stackoverflowSite,
+		"%s/%d?%s", stackoverflowAPIURL, info.QuestionID, stackoverflowSite,
 	)
 }

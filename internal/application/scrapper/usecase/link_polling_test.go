@@ -20,7 +20,7 @@ type fakeBotPort struct {
 }
 
 func (f *fakeBotPort) NotifyAboutUpdatedLinks(
-	ctx context.Context, event model.LinkUpdatedEvent,
+	_ context.Context, event model.LinkUpdatedEvent,
 ) error {
 	f.events = append(f.events, event)
 	return nil
@@ -31,50 +31,50 @@ type fakeSubscriptionRepo struct {
 }
 
 func (f *fakeSubscriptionRepo) Subscribe(
-	ctx context.Context, link domain.Link, chatID int64, tags []string,
+	_ context.Context, _ domain.Link, _ int64, _ []string,
 ) (domain.Subscription, error) {
 	return domain.Subscription{}, nil
 }
 
 func (f *fakeSubscriptionRepo) Unsubscribe(
-	ctx context.Context, link domain.Link, chatID int64,
+	_ context.Context, _ domain.Link, _ int64,
 ) (domain.Subscription, error) {
 	return domain.Subscription{}, nil
 }
 
 func (f *fakeSubscriptionRepo) GetLink(
-	ctx context.Context, linkID int64,
+	_ context.Context, _ int64,
 ) (domain.Link, error) {
 	return domain.Link{}, nil
 }
 
 func (f *fakeSubscriptionRepo) GetAllLinks(
-	ctx context.Context,
+	_ context.Context,
 ) ([]domain.Link, error) {
 	return nil, nil
 }
 
 func (f *fakeSubscriptionRepo) UpdateLink(
-	ctx context.Context, link domain.Link,
+	_ context.Context, link domain.Link,
 ) (domain.Link, error) {
 	f.updatedLinks = append(f.updatedLinks, link)
 	return link, nil
 }
 
 func (f *fakeSubscriptionRepo) FindLinkByURL(
-	ctx context.Context, parsedURL *url.URL,
+	_ context.Context, _ *url.URL,
 ) (domain.Link, error) {
 	return domain.Link{}, nil
 }
 
 func (f *fakeSubscriptionRepo) AllChatSubscriptions(
-	ctx context.Context, chatID int64,
+	_ context.Context, _ int64,
 ) ([]domain.Subscription, error) {
 	return nil, nil
 }
 
 func (f *fakeSubscriptionRepo) AllLinkSubscriptions(
-	ctx context.Context, link domain.Link,
+	_ context.Context, _ domain.Link,
 ) ([]domain.Subscription, error) {
 	return nil, nil
 }

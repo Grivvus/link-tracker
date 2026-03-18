@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
 
-const githubApiURL = "https://api.github.com/repos"
+const githubAPIURL = "https://api.github.com/repos"
 
 type GitHubClient struct {
 	logger     *slog.Logger
@@ -26,9 +27,9 @@ func NewGitHubClient(logger *slog.Logger) *GitHubClient {
 }
 
 func (g *GitHubClient) FetchRepo(
-	info domain.GitHubURLInfo,
+	ctx context.Context, info domain.GitHubURLInfo,
 ) (dto.GithubRepository, error) {
-	req, err := http.NewRequest(http.MethodGet, buildGitHubURL(info), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildGitHubURL(info), nil)
 	if err != nil {
 		g.logger.Error("error creating request", "url info", info)
 		return dto.GithubRepository{}, fmt.Errorf(
@@ -47,7 +48,7 @@ func (g *GitHubClient) FetchRepo(
 	}
 	defer func() { _ = resp.Body.Close() }()
 	g.logger.Info("got response", "code", resp.StatusCode)
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		g.logger.Error(
 			"getting error-response",
 			"url info", info, "status_code", resp.StatusCode,
@@ -67,6 +68,6 @@ func (g *GitHubClient) FetchRepo(
 
 func buildGitHubURL(info domain.GitHubURLInfo) string {
 	return fmt.Sprintf(
-		"%s/%s/%s", githubApiURL, info.Username, info.RepoName,
+		"%s/%s/%s", githubAPIURL, info.Username, info.RepoName,
 	)
 }

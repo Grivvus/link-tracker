@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -33,12 +34,12 @@ func testClientLogger() *slog.Logger {
 func TestGitHubClient_FetchRepo_Non2xxResponse(t *testing.T) {
 	client := NewGitHubClient(testClientLogger())
 	client.httpClient = &http.Client{
-		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusBadGateway, `{"message":"bad gateway"}`), nil
 		}),
 	}
 
-	_, err := client.FetchRepo(domain.GitHubURLInfo{
+	_, err := client.FetchRepo(context.TODO(), domain.GitHubURLInfo{
 		Username: "user",
 		RepoName: "repo",
 	})
@@ -48,12 +49,12 @@ func TestGitHubClient_FetchRepo_Non2xxResponse(t *testing.T) {
 func TestGitHubClient_FetchRepo_InvalidJSON(t *testing.T) {
 	client := NewGitHubClient(testClientLogger())
 	client.httpClient = &http.Client{
-		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusOK, `{"name":"repo",`), nil
 		}),
 	}
 
-	_, err := client.FetchRepo(domain.GitHubURLInfo{
+	_, err := client.FetchRepo(context.TODO(), domain.GitHubURLInfo{
 		Username: "user",
 		RepoName: "repo",
 	})

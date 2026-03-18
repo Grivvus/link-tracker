@@ -13,4 +13,4 @@ type listLinksResponse struct {
 	Size  int32          `json:"size"`
 }
 
-var chatIDCounter int64 = time.Now().UnixNano()
+var chatIDCounter = time.Now().UnixNano()

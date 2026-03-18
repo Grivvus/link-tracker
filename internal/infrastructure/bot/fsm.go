@@ -23,7 +23,7 @@ func newFSM() *fsm.FSM {
 	})
 }
 
-func StartCallback(f *fsm.FSM, args ...any) {
+func StartCallback(_ *fsm.FSM, args ...any) {
 	ctx := args[0].(context.Context)
 	b := args[1].(*bot.Bot)
 	chatID := args[2].(int64)
@@ -39,7 +39,7 @@ func StartCallback(f *fsm.FSM, args ...any) {
 	})
 }
 
-func AskLinkCallback(f *fsm.FSM, args ...any) {
+func AskLinkCallback(_ *fsm.FSM, args ...any) {
 	ctx := args[0].(context.Context)
 	b := args[1].(*bot.Bot)
 	chatID := args[2].(int64)
@@ -56,7 +56,7 @@ func AskLinkCallback(f *fsm.FSM, args ...any) {
 	})
 }
 
-func AskTagsCallback(f *fsm.FSM, args ...any) {
+func AskTagsCallback(_ *fsm.FSM, args ...any) {
 	ctx := args[0].(context.Context)
 	b := args[1].(*bot.Bot)
 	chatID := args[2].(int64)

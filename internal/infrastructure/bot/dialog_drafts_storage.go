@@ -10,6 +10,8 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
+const initialCap = 10
+
 type dialogDraftsStorage struct {
 	logger  *slog.Logger
 	mu      sync.Mutex
@@ -20,7 +22,7 @@ func newDialogDraftsStorage(logger *slog.Logger) repository.DialogDraftsReposito
 	return &dialogDraftsStorage{
 		logger:  logger,
 		mu:      sync.Mutex{},
-		storage: make(map[int64]model.TrackLinkCmd, 10),
+		storage: make(map[int64]model.TrackLinkCmd, initialCap),
 	}
 }
 

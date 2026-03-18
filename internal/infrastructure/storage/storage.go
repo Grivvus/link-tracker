@@ -11,6 +11,8 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
+const initialCap = 10
+
 type Storage struct {
 	linkStorage            map[int64]domain.Link
 	subscriptionStorage    map[int64]domain.Subscription
@@ -24,36 +26,34 @@ type Storage struct {
 	rwmuSubscription       sync.RWMutex
 }
 
-var storage *Storage = nil
+var storage *Storage
 
 func NewSubscriptionStorage() repository.SubscriptionRepository {
 	if storage == nil {
-		storage = &Storage{
-			linkStorage:            make(map[int64]domain.Link, 10),
-			subscriptionStorage:    make(map[int64]domain.Subscription, 10),
-			linkIDByURL:            make(map[string]int64, 10),
-			subscriptionIDByChatID: make(map[int64]map[int64]int64, 10),
-			chatStorage:            make(map[int64]struct{}, 10),
-		}
+		createStorage()
 	}
 	return storage
 }
 
 func NewChatStorage() repository.ChatRepository {
 	if storage == nil {
-		storage = &Storage{
-			linkStorage:            make(map[int64]domain.Link, 10),
-			subscriptionStorage:    make(map[int64]domain.Subscription, 10),
-			linkIDByURL:            make(map[string]int64, 10),
-			subscriptionIDByChatID: make(map[int64]map[int64]int64, 10),
-			chatStorage:            make(map[int64]struct{}, 10),
-		}
+		createStorage()
 	}
 	return storage
 }
 
+func createStorage() {
+	storage = &Storage{
+		linkStorage:            make(map[int64]domain.Link, initialCap),
+		subscriptionStorage:    make(map[int64]domain.Subscription, initialCap),
+		linkIDByURL:            make(map[string]int64, initialCap),
+		subscriptionIDByChatID: make(map[int64]map[int64]int64, initialCap),
+		chatStorage:            make(map[int64]struct{}, initialCap),
+	}
+}
+
 func (st *Storage) Subscribe(
-	ctx context.Context, link domain.Link, chatID int64, tags []string,
+	_ context.Context, link domain.Link, chatID int64, tags []string,
 ) (domain.Subscription, error) {
 	st.rwmuChat.RLock()
 	_, chatExists := st.chatStorage[chatID]
@@ -73,7 +73,7 @@ func (st *Storage) Subscribe(
 	defer st.rwmuSubscription.Unlock()
 
 	if _, ok := st.subscriptionIDByChatID[chatID]; !ok {
-		st.subscriptionIDByChatID[chatID] = make(map[int64]int64, 2)
+		st.subscriptionIDByChatID[chatID] = make(map[int64]int64)
 	}
 	if _, alreadySubscribed := st.subscriptionIDByChatID[chatID][linkID]; alreadySubscribed {
 		return domain.Subscription{}, repository.ErrEntityAlreadyExists
@@ -87,7 +87,7 @@ func (st *Storage) Subscribe(
 }
 
 func (st *Storage) Unsubscribe(
-	ctx context.Context, link domain.Link, chatID int64,
+	_ context.Context, link domain.Link, chatID int64,
 ) (domain.Subscription, error) {
 	st.rwmuChat.RLock()
 	_, chatExists := st.chatStorage[chatID]
@@ -132,7 +132,7 @@ func (st *Storage) Unsubscribe(
 	}, nil
 }
 
-func (st *Storage) GetAllLinks(ctx context.Context) ([]domain.Link, error) {
+func (st *Storage) GetAllLinks(_ context.Context) ([]domain.Link, error) {
 	st.rwmuLink.RLock()
 	defer st.rwmuLink.RUnlock()
 	links := make([]domain.Link, 0, len(st.linkStorage))
@@ -142,7 +142,7 @@ func (st *Storage) GetAllLinks(ctx context.Context) ([]domain.Link, error) {
 	return links, nil
 }
 
-func (st *Storage) GetLink(ctx context.Context, linkID int64) (domain.Link, error) {
+func (st *Storage) GetLink(_ context.Context, linkID int64) (domain.Link, error) {
 	st.rwmuLink.RLock()
 	defer st.rwmuLink.RUnlock()
 	link, ok := st.linkStorage[linkID]
@@ -152,7 +152,7 @@ func (st *Storage) GetLink(ctx context.Context, linkID int64) (domain.Link, erro
 	return link, nil
 }
 
-func (st *Storage) UpdateLink(ctx context.Context, link domain.Link) (domain.Link, error) {
+func (st *Storage) UpdateLink(_ context.Context, link domain.Link) (domain.Link, error) {
 	_, err := st.saveOrGetLink(link)
 	if err != nil {
 		return domain.Link{}, err
@@ -161,7 +161,7 @@ func (st *Storage) UpdateLink(ctx context.Context, link domain.Link) (domain.Lin
 }
 
 func (st *Storage) FindLinkByURL(
-	ctx context.Context, inputURL *url.URL,
+	_ context.Context, inputURL *url.URL,
 ) (domain.Link, error) {
 	if inputURL == nil {
 		return domain.Link{}, fmt.Errorf(
@@ -184,7 +184,7 @@ func (st *Storage) FindLinkByURL(
 }
 
 func (st *Storage) AllChatSubscriptions(
-	ctx context.Context, chatID int64,
+	_ context.Context, chatID int64,
 ) ([]domain.Subscription, error) {
 	st.rwmuChat.RLock()
 	_, chatExists := st.chatStorage[chatID]
@@ -211,7 +211,7 @@ func (st *Storage) AllChatSubscriptions(
 }
 
 func (st *Storage) AllLinkSubscriptions(
-	ctx context.Context, link domain.Link,
+	_ context.Context, link domain.Link,
 ) ([]domain.Subscription, error) {
 	linkID, err := st.findLinkID(link)
 	if err != nil {
@@ -220,13 +220,33 @@ func (st *Storage) AllLinkSubscriptions(
 	st.rwmuSubscription.RLock()
 	defer st.rwmuSubscription.RUnlock()
 
-	ret := make([]domain.Subscription, 0, 2)
+	ret := make([]domain.Subscription, 0, initialCap)
 	for _, sub := range st.subscriptionStorage {
 		if sub.LinkID == linkID {
 			ret = append(ret, sub)
 		}
 	}
 	return ret, nil
+}
+
+func (st *Storage) Register(_ context.Context, chatID int64) error {
+	st.rwmuChat.Lock()
+	defer st.rwmuChat.Unlock()
+	if _, ok := st.chatStorage[chatID]; ok {
+		return repository.ErrEntityAlreadyExists
+	}
+	st.chatStorage[chatID] = struct{}{}
+	return nil
+}
+
+func (st *Storage) Delete(_ context.Context, chatID int64) error {
+	st.rwmuChat.Lock()
+	defer st.rwmuChat.Unlock()
+	if _, ok := st.chatStorage[chatID]; !ok {
+		return repository.ErrEntityNotFound
+	}
+	delete(st.chatStorage, chatID)
+	return nil
 }
 
 func (st *Storage) saveOrGetLink(link domain.Link) (int64, error) {
@@ -281,33 +301,6 @@ func (st *Storage) getNextLinkID() int64 {
 func (st *Storage) getNextSubscriptionID() int64 {
 	newID := st.currentMaxSubID.Add(1)
 	return newID
-}
-
-func (st *Storage) Register(ctx context.Context, chatID int64) error {
-	st.rwmuChat.Lock()
-	defer st.rwmuChat.Unlock()
-	if _, ok := st.chatStorage[chatID]; ok {
-		return repository.ErrEntityAlreadyExists
-	}
-	st.chatStorage[chatID] = struct{}{}
-	return nil
-}
-
-func (st *Storage) Delete(ctx context.Context, chatID int64) error {
-	st.rwmuChat.Lock()
-	defer st.rwmuChat.Unlock()
-	if _, ok := st.chatStorage[chatID]; !ok {
-		return repository.ErrEntityNotFound
-	}
-	delete(st.chatStorage, chatID)
-	return nil
-}
-
-func (st *Storage) isChatRegistered(chatID int64) bool {
-	st.rwmuChat.RLock()
-	defer st.rwmuChat.RUnlock()
-	_, ok := st.chatStorage[chatID]
-	return ok
 }
 
 func normalizeURL(linkURL *url.URL) string {

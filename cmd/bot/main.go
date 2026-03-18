@@ -23,6 +23,10 @@ import (
 )
 
 func main() {
+	var exitCode = 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
 	logger := slog.New(slog.NewTextHandler(
 		os.Stdout, &slog.HandlerOptions{AddSource: true},
 	))
@@ -33,13 +37,16 @@ func main() {
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
 		logger.Error(err.Error())
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.BotGRPCPort))
+	var lisConf net.ListenConfig
+	lis, err := lisConf.Listen(ctx, "tcp", fmt.Sprintf(":%d", cfg.BotGRPCPort))
 	if err != nil {
 		logger.Error("can't start tcp listener", "err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 	defer func() { _ = lis.Close() }()
 
@@ -54,7 +61,8 @@ func main() {
 		const msg = "can't create grpc client"
 		if cfg.UseGRPC {
 			logger.Error(msg, "err", err)
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
 		logger.Warn(msg, "err", err)
 	}
@@ -69,14 +77,16 @@ func main() {
 	c, err := scrapper.NewClient(fmt.Sprintf("http://%s/", cfg.ScrapperURL), scrapper.WithHTTPClient(&hc))
 	if err != nil {
 		logger.Error("can't create scrapper http client with", "err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 	sp := adapters.NewScrapperPort(logger, c, grpcScrapperClient, cfg.UseGRPC)
 
 	botapp, err := bot.New(ctx, cfg, logger, sp)
 	if err != nil {
 		slog.Error("can't start bot", "with err", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	bp := adapters.NewBotPort(botapp.Bot, logger)

@@ -34,7 +34,7 @@ func (a *LinkStateAdapter) Fetch(ctx context.Context, link domain.Link) (model.L
 				"%w: exected valid GitHubURLInfo", ports.ErrBadParams,
 			)
 		}
-		ghDTO, err := a.ghClient.FetchRepo(*ghinfo)
+		ghDTO, err := a.ghClient.FetchRepo(ctx, *ghinfo)
 		if err != nil {
 			return model.LinkState{}, err
 		}
@@ -51,7 +51,7 @@ func (a *LinkStateAdapter) Fetch(ctx context.Context, link domain.Link) (model.L
 				ports.ErrBadParams,
 			)
 		}
-		stoverflowDTO, err := a.stackoverflowClient.FetchQuestion(*stinfo)
+		stoverflowDTO, err := a.stackoverflowClient.FetchQuestion(ctx, *stinfo)
 		if err != nil {
 			return model.LinkState{}, err
 		}
