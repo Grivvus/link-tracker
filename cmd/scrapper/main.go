@@ -85,9 +85,8 @@ func main() {
 	botPort := adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	_ = botPort // needed, when i implement notifier
 
-	chatRepo := storage.NewChatStorage()
-	subscriptionRepo := storage.NewSubscriptionStorage()
-	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subscriptionRepo)
+	st := storage.New()
+	scrapperPort := adapters.NewScrapperAdapter(logger, st, st)
 	var httpServInterface scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
 	h := scrapper.HandlerFromMux(httpServInterface, mux)
@@ -107,7 +106,7 @@ func main() {
 		return
 	}
 	poller := usecase.NewLinkPollingUseCase(
-		logger, sched, linkStatePort, botPort, subscriptionRepo, chatRepo,
+		logger, sched, linkStatePort, botPort, st, st,
 	)
 	poller.Start(ctx)
 

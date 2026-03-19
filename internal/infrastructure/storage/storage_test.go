@@ -11,10 +11,6 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
-func resetStorage() {
-	storage = nil
-}
-
 func mustRegisterChat(t *testing.T, repo repository.ChatRepository, chatID int64) {
 	t.Helper()
 	require.NoError(t, repo.Register(context.Background(), chatID))
@@ -28,10 +24,10 @@ func mustNewLink(t *testing.T, rawURL string) domain.Link {
 }
 
 func TestStorage_Subscribe_DuplicateSubscription(t *testing.T) {
-	resetStorage()
 	ctx := context.Background()
-	chatRepo := NewChatStorage()
-	subRepo := NewSubscriptionStorage()
+	st := New()
+	chatRepo := st
+	subRepo := st
 	chatID := int64(1)
 	link := mustNewLink(t, "https://github.com/u/repo-1")
 
@@ -44,10 +40,10 @@ func TestStorage_Subscribe_DuplicateSubscription(t *testing.T) {
 }
 
 func TestStorage_AllLinkSubscriptions_ReturnsOnlyFollowers(t *testing.T) {
-	resetStorage()
 	ctx := context.Background()
-	chatRepo := NewChatStorage()
-	subRepo := NewSubscriptionStorage()
+	st := New()
+	chatRepo := st
+	subRepo := st
 
 	chatID1 := int64(100)
 	chatID2 := int64(200)
@@ -69,10 +65,10 @@ func TestStorage_AllLinkSubscriptions_ReturnsOnlyFollowers(t *testing.T) {
 }
 
 func TestStorage_AllChatSubscriptions_EmptyWhenNoLinks(t *testing.T) {
-	resetStorage()
 	ctx := context.Background()
-	chatRepo := NewChatStorage()
-	subRepo := NewSubscriptionStorage()
+	st := New()
+	chatRepo := st
+	subRepo := st
 	chatID := int64(777)
 	mustRegisterChat(t, chatRepo, chatID)
 
@@ -82,10 +78,10 @@ func TestStorage_AllChatSubscriptions_EmptyWhenNoLinks(t *testing.T) {
 }
 
 func TestStorage_GetAllLinks_AfterSubscriptions(t *testing.T) {
-	resetStorage()
 	ctx := context.Background()
-	chatRepo := NewChatStorage()
-	subRepo := NewSubscriptionStorage()
+	st := New()
+	chatRepo := st
+	subRepo := st
 	chatID := int64(42)
 	mustRegisterChat(t, chatRepo, chatID)
 

@@ -29,10 +29,10 @@ func TestScrapperAdapter_AddLinkAndListTrackedLinks_SavesData(t *testing.T) {
 	ctx := context.Background()
 	chatID := nextID()
 	rawURL := fmt.Sprintf("https://github.com/user/repo-%d", chatID)
+	st := storage.New()
 	adapter := NewScrapperAdapter(
 		testLogger(),
-		storage.NewChatStorage(),
-		storage.NewSubscriptionStorage(),
+		st, st,
 	)
 
 	require.NoError(t, adapter.RegisterTGChat(ctx, chatID))
@@ -58,10 +58,10 @@ func TestScrapperAdapter_AddLinkAndListTrackedLinks_SavesData(t *testing.T) {
 func TestScrapperAdapter_AddLink_InvalidURL_ReturnsBadParams(t *testing.T) {
 	ctx := context.Background()
 	chatID := nextID()
+	st := storage.New()
 	adapter := NewScrapperAdapter(
 		testLogger(),
-		storage.NewChatStorage(),
-		storage.NewSubscriptionStorage(),
+		st, st,
 	)
 
 	require.NoError(t, adapter.RegisterTGChat(ctx, chatID))
@@ -78,10 +78,10 @@ func TestScrapperAdapter_AddLink_DuplicateSubscription_ReturnsAlreadyTracked(t *
 	ctx := context.Background()
 	chatID := nextID()
 	rawURL := fmt.Sprintf("https://github.com/user/repo-dup-%d", chatID)
+	st := storage.New()
 	adapter := NewScrapperAdapter(
 		testLogger(),
-		storage.NewChatStorage(),
-		storage.NewSubscriptionStorage(),
+		st, st,
 	)
 
 	require.NoError(t, adapter.RegisterTGChat(ctx, chatID))
@@ -101,10 +101,10 @@ func TestScrapperAdapter_AddLink_DuplicateSubscription_ReturnsAlreadyTracked(t *
 func TestScrapperAdapter_GetTrackedLinks_NoSubscriptions_ReturnsEmpty(t *testing.T) {
 	ctx := context.Background()
 	chatID := nextID()
+	st := storage.New()
 	adapter := NewScrapperAdapter(
 		testLogger(),
-		storage.NewChatStorage(),
-		storage.NewSubscriptionStorage(),
+		st, st,
 	)
 
 	require.NoError(t, adapter.RegisterTGChat(ctx, chatID))

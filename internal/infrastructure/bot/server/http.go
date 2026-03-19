@@ -42,6 +42,7 @@ func (serv *BotServer) PostUpdates(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ports.ErrBadParams) {
 			http.Error(w, "bad request parameters", http.StatusBadRequest)
+			return
 		}
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return

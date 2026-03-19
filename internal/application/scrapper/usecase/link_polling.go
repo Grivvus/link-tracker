@@ -57,7 +57,7 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 				go func(link domain.Link) {
 					subs, err := poller.subscriptionRepository.AllLinkSubscriptions(ctx, link)
 					if err != nil {
-						poller.logger.Error("can't fetch trackings", "err", err)
+						poller.logger.Warn("can't fetch trackings", "err", err)
 						return
 					}
 					subsChatIDs := make([]int64, 0, len(subs))
@@ -67,7 +67,7 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 
 					lstate, err := poller.linkState.Fetch(ctx, link)
 					if err != nil {
-						poller.logger.Error("can't fetch link state", "err", err)
+						poller.logger.Warn("can't fetch link state", "err", err)
 					}
 					poller.updateAndNotify(ctx, link, subsChatIDs, lstate)
 				}(link)

@@ -26,24 +26,8 @@ type Storage struct {
 	rwmuSubscription       sync.RWMutex
 }
 
-var storage *Storage
-
-func NewSubscriptionStorage() repository.SubscriptionRepository {
-	if storage == nil {
-		createStorage()
-	}
-	return storage
-}
-
-func NewChatStorage() repository.ChatRepository {
-	if storage == nil {
-		createStorage()
-	}
-	return storage
-}
-
-func createStorage() {
-	storage = &Storage{
+func New() *Storage {
+	return &Storage{
 		linkStorage:            make(map[int64]domain.Link, initialCap),
 		subscriptionStorage:    make(map[int64]domain.Subscription, initialCap),
 		linkIDByURL:            make(map[string]int64, initialCap),
