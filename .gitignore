@@ -1,4 +1,6 @@
 .env
+.env.goose
+.env.db
 *.out
 coverage.*
 *.coverprofile

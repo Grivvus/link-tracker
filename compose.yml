@@ -6,6 +6,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bot
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
       - "50051:50051"
@@ -14,7 +17,44 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.scrapper
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8001:8000"
       - "50052:50051"
     restart: no
+
+  db:
+    image: postgres:18-alpine
+    env_file:
+      - .env.db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    ports:
+      - "5432:5432"
+    restart: no
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data/
+
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.goose
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+
+volumes:
+  postgres_volume:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/grivvus/docker_volumes/postgres/link-tracker
+      o: bind
