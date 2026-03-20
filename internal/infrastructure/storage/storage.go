@@ -131,7 +131,9 @@ func (st *Storage) GetLink(_ context.Context, linkID int64) (domain.Link, error)
 	defer st.rwmuLink.RUnlock()
 	link, ok := st.linkStorage[linkID]
 	if !ok {
-		return link, repository.ErrEntityNotFound
+		return link, fmt.Errorf(
+			"%w: can't find link with thid id", repository.ErrEntityNotFound,
+		)
 	}
 	return link, nil
 }
