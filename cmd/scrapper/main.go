@@ -11,6 +11,8 @@ import (
 	"os/signal"
 
 	"github.com/go-co-op/gocron/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/usecase"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	botpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
@@ -20,6 +22,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -85,8 +88,13 @@ func main() {
 	botPort := adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	_ = botPort // needed, when i implement notifier
 
-	st := storage.New()
-	scrapperPort := adapters.NewScrapperAdapter(logger, st, st)
+	chatRepo, subsciptionRepo, err := newRepositories(ctx, cfg)
+	if err != nil {
+		logger.Error("can't init repository", "err", err)
+		exitCode = 1
+		return
+	}
+	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subsciptionRepo)
 	var httpServInterface scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
 	h := scrapper.HandlerFromMux(httpServInterface, mux)
@@ -106,7 +114,7 @@ func main() {
 		return
 	}
 	poller := usecase.NewLinkPollingUseCase(
-		logger, sched, linkStatePort, botPort, st, st,
+		logger, sched, linkStatePort, botPort, subsciptionRepo, chatRepo,
 	)
 	poller.Start(ctx)
 
@@ -126,5 +134,31 @@ func main() {
 	}()
 
 	<-ctx.Done()
-	logger.Info("scrapper was shutted down")
+	logger.Info("scrapper was shut down")
+}
+
+func newRepositories(
+	ctx context.Context, cfg infrastructure.Config,
+) (repository.ChatRepository, repository.SubscriptionRepository, error) {
+	switch cfg.DBAccessType {
+	case "SQL":
+		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
+		if err != nil {
+			return nil, nil, err
+		}
+		pool, err := pgxpool.NewWithConfig(ctx, poolConf)
+		if err != nil {
+			return nil, nil, err
+		}
+		chat := sql.NewChartRepository(pool)
+		sub := sql.NewSubscriptionRepository(pool)
+		return chat, sub, nil
+	case "ORM":
+		panic("not implemented")
+	case "MEM":
+		st := storage.New()
+		return st, st, nil
+	default:
+		return nil, nil, errors.New("unreachable")
+	}
 }

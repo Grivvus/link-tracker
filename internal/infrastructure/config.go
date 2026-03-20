@@ -39,7 +39,7 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return cfg, fmt.Errorf("%w: info - %s", ErrCantParseConfig, err.Error())
 	}
-	if cfg.DBAccessType != "SQL" && cfg.DBAccessType != "ORM" {
+	if cfg.DBAccessType != "SQL" && cfg.DBAccessType != "ORM" && cfg.DBAccessType != "MEM" {
 		return cfg, fmt.Errorf("%w: invalid DB_ACCESS_TYPE, expect SQL or ORM", err)
 	}
 	return cfg, nil
