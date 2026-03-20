@@ -57,3 +57,8 @@ generate-grpc:
 	@protoc --go_out=internal/infrastructure/ --go_opt=paths=source_relative \
             --go-grpc_out=internal/infrastructure/ --go-grpc_opt=paths=source_relative \
             grpc/bot/bot.proto
+
+.PHONY: generate-sqlc
+generate-sqlc:
+	@echo "Generate sqlc"
+	@go tool sqlc generate -f ./db/sqlc.yml

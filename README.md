@@ -16,6 +16,9 @@ cp .env.example .env
 # Если хотите использовать общение между сервисами по grpc,
 # то добавьте 'USE_GRPC=true' в .env файл
 
+cp .env.db.example .env.db
+cp .env.goose.example .env.goose
+
 # Запускаем оба сервиса через docker
 docker compose up --build
 ```
