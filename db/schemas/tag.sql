@@ -1,4 +1,4 @@
 CREATE TABLE "tag" (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     name TEXT UNIQUE
 );

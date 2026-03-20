@@ -24,7 +24,7 @@ import (
 
 func main() {
 	var exitCode = 0
-	// call os.Exit in defer, so all other defer blocks could be called
+	// call os.Exit in defer, so all others defer blocks could be called
 	defer func() {
 		os.Exit(exitCode)
 	}()

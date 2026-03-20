@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE "chat" (
-    id integer PRIMARY KEY
+    id BIGINT PRIMARY KEY
 );
 -- +goose StatementEnd
 

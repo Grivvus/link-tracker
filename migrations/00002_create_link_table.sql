@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE "link" (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     url TEXT NOT NULL UNIQUE,
     last_update TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
