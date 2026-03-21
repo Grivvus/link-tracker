@@ -114,7 +114,8 @@ func main() {
 		return
 	}
 	poller := usecase.NewLinkPollingUseCase(
-		logger, sched, linkStatePort, botPort, subsciptionRepo, chatRepo,
+		logger, sched, linkStatePort, botPort,
+		subsciptionRepo, chatRepo, int64(cfg.PollerIntervalMinutes),
 	)
 	poller.Start(ctx)
 

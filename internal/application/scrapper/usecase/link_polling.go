@@ -22,13 +22,14 @@ type LinkPollingUseCase struct {
 	chatRepository         repository.ChatRepository
 	ghClient               *clients.GitHubClient
 	stackoverflowClient    *clients.StackoverflowClient
+	pollerIntervalMinutes  int64
 }
 
 func NewLinkPollingUseCase(
 	logger *slog.Logger, sched gocron.Scheduler,
 	linkState ports.LinkStatePort, botPort ports.BotPort,
 	subscriptionRepo repository.SubscriptionRepository,
-	chatRepo repository.ChatRepository,
+	chatRepo repository.ChatRepository, pollerIntervalMinutes int64,
 ) LinkPollingUseCase {
 	return LinkPollingUseCase{
 		sched:                  sched,
@@ -39,12 +40,13 @@ func NewLinkPollingUseCase(
 		chatRepository:         chatRepo,
 		ghClient:               clients.NewGitHubClient(logger),
 		stackoverflowClient:    clients.NewStackoverflowClient(logger),
+		pollerIntervalMinutes:  pollerIntervalMinutes,
 	}
 }
 
 func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 	_, err := poller.sched.NewJob(
-		gocron.DurationJob(10*time.Minute),
+		gocron.DurationJob(time.Duration(poller.pollerIntervalMinutes)*time.Minute),
 		gocron.NewTask(func() {
 			poller.logger.Info("Start polling job")
 			links, err := poller.subscriptionRepository.GetAllLinks(ctx)
