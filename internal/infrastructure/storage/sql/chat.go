@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
@@ -45,6 +46,9 @@ func (repo *ChatRepositorySQL) Register(ctx context.Context, chatID int64) error
 func (repo *ChatRepositorySQL) Delete(ctx context.Context, chatID int64) error {
 	id, err := repo.queries.DeleteChat(ctx, chatID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return repository.ErrEntityNotFound
+		}
 		return fmt.Errorf("%w: detail - %v",
 			repository.ErrUnknownDBError, err.Error(),
 		)

@@ -32,7 +32,7 @@ func (repo *SubscriptionRepositorySQL) Subscribe(
 ) (domain.Subscription, error) {
 	isReg, err := repo.isChatRegistered(ctx, chatID)
 	if err != nil {
-		return domain.Subscription{}, nil
+		return domain.Subscription{}, err
 	}
 	if !isReg {
 		return domain.Subscription{}, fmt.Errorf(
@@ -58,6 +58,20 @@ func (repo *SubscriptionRepositorySQL) Subscribe(
 	} else {
 		link.ID = dbLink.ID
 		link.LastUpdate = dbLink.LastUpdate.Time
+	}
+	_, err = repo.queries.FindSubscriptionByLinkAndChat(
+		ctx, gen.FindSubscriptionByLinkAndChatParams{
+			ChatID: chatID,
+			LinkID: link.ID,
+		},
+	)
+	if err == nil {
+		return domain.Subscription{}, repository.ErrEntityAlreadyExists
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
 	}
 	sub, err := repo.queries.Subscribe(ctx, gen.SubscribeParams{
 		LinkID: link.ID,
@@ -107,7 +121,7 @@ func (repo *SubscriptionRepositorySQL) Unsubscribe(
 ) (domain.Subscription, error) {
 	isReg, err := repo.isChatRegistered(ctx, chatID)
 	if err != nil {
-		return domain.Subscription{}, nil
+		return domain.Subscription{}, err
 	}
 	if !isReg {
 		return domain.Subscription{}, fmt.Errorf(
@@ -271,6 +285,15 @@ func (repo *SubscriptionRepositorySQL) FindLinkByURL(
 func (repo *SubscriptionRepositorySQL) AllChatSubscriptions(
 	ctx context.Context, chatID int64,
 ) ([]domain.Subscription, error) {
+	isReg, err := repo.isChatRegistered(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if !isReg {
+		return nil, fmt.Errorf(
+			"%w: no chat with thid id", repository.ErrEntityNotFound,
+		)
+	}
 	tx, err := repo.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf(
