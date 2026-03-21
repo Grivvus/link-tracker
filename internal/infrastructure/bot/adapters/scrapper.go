@@ -366,7 +366,7 @@ func (s *ScrapperAdapter) httpRegisterTGChat(
 		switch resp.StatusCode {
 		case http.StatusBadRequest:
 			return ports.ErrBadParams
-		case http.StatusNotFound:
+		case http.StatusConflict:
 			return ports.ErrChatAlreadyExist
 		default:
 			return errors.New("unexpected error")

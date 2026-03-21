@@ -2,10 +2,10 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
@@ -17,7 +17,7 @@ type ChatRepositorySQL struct {
 	pool    *pgxpool.Pool
 }
 
-func NewChartRepository(pool *pgxpool.Pool) repository.ChatRepository {
+func NewChatRepository(pool *pgxpool.Pool) repository.ChatRepository {
 	return &ChatRepositorySQL{
 		queries: gen.New(pool),
 		pool:    pool,
@@ -38,7 +38,9 @@ func (repo *ChatRepositorySQL) Register(ctx context.Context, chatID int64) error
 				)
 			}
 		}
-		return repository.ErrUnknownDBError
+		return fmt.Errorf(
+			"%w: detail - %v", repository.ErrUnknownDBError, err.Error(),
+		)
 	}
 	return nil
 }
@@ -46,8 +48,11 @@ func (repo *ChatRepositorySQL) Register(ctx context.Context, chatID int64) error
 func (repo *ChatRepositorySQL) Delete(ctx context.Context, chatID int64) error {
 	id, err := repo.queries.DeleteChat(ctx, chatID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return repository.ErrEntityNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf(
+				"%w: chat with this id doesn't exist",
+				repository.ErrEntityNotFound,
+			)
 		}
 		return fmt.Errorf("%w: detail - %v",
 			repository.ErrUnknownDBError, err.Error(),
@@ -55,7 +60,7 @@ func (repo *ChatRepositorySQL) Delete(ctx context.Context, chatID int64) error {
 	}
 	if id != chatID {
 		return fmt.Errorf(
-			"%w: chat with thid id doesn't exist",
+			"%w: chat with this id doesn't exist",
 			repository.ErrEntityNotFound,
 		)
 	}

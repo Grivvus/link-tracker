@@ -22,3 +22,10 @@ cp .env.goose.example .env.goose
 # Запускаем оба сервиса через docker
 docker compose up --build
 ```
+
+### Интеграционные тесты
+```bash
+# Проверьте, что DB_ACCESS_TYPE="MEM"
+# интеграционные тесты работают только с ней
+go test ./tests/... -v
+```

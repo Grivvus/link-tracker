@@ -22,6 +22,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/orm"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -151,11 +152,21 @@ func newRepositories(
 		if err != nil {
 			return nil, nil, err
 		}
-		chat := sql.NewChartRepository(pool)
+		chat := sql.NewChatRepository(pool)
 		sub := sql.NewSubscriptionRepository(pool)
 		return chat, sub, nil
 	case "ORM":
-		panic("not implemented")
+		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
+		if err != nil {
+			return nil, nil, err
+		}
+		pool, err := pgxpool.NewWithConfig(ctx, poolConf)
+		if err != nil {
+			return nil, nil, err
+		}
+		chat := orm.NewChatRepository(pool)
+		sub := orm.NewSubscriptionRepository(pool)
+		return chat, sub, nil
 	case "MEM":
 		st := storage.New()
 		return st, st, nil

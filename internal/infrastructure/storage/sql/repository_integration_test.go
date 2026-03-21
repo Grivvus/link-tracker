@@ -114,7 +114,7 @@ func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_MatchesInMemoryB
 
 func (s *RepositoryIntegrationSuite) newSQLPair() repoPair {
 	return repoPair{
-		chat: sqlrepo.NewChartRepository(s.pool),
+		chat: sqlrepo.NewChatRepository(s.pool),
 		sub:  sqlrepo.NewSubscriptionRepository(s.pool),
 	}
 }
