@@ -20,8 +20,8 @@ type Link struct {
 
 type Subscription struct {
 	ID     int64
-	LinkID pgtype.Int8
-	ChatID pgtype.Int8
+	LinkID int64
+	ChatID int64
 }
 
 type SubscriptionTag struct {
@@ -31,5 +31,5 @@ type SubscriptionTag struct {
 
 type Tag struct {
 	ID   int64
-	Name pgtype.Text
+	Name string
 }

@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const findTag = `-- name: FindTag :one
@@ -16,7 +14,7 @@ SELECT id, name from "tag"
     WHERE name = $1
 `
 
-func (q *Queries) FindTag(ctx context.Context, name pgtype.Text) (Tag, error) {
+func (q *Queries) FindTag(ctx context.Context, name string) (Tag, error) {
 	row := q.db.QueryRow(ctx, findTag, name)
 	var i Tag
 	err := row.Scan(&i.ID, &i.Name)

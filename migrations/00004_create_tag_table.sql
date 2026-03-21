@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE "tag" (
     id BIGSERIAL PRIMARY KEY,
-    name TEXT UNIQUE
+    name TEXT UNIQUE NOT NULL
 );
 -- +goose StatementEnd
 

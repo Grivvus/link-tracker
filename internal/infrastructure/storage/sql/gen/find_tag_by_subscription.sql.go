@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const findTagBySubscription = `-- name: FindTagBySubscription :many
@@ -20,7 +18,7 @@ SELECT "tag".id as tag_id, "tag".name as name from
 
 type FindTagBySubscriptionRow struct {
 	TagID int64
-	Name  pgtype.Text
+	Name  string
 }
 
 func (q *Queries) FindTagBySubscription(ctx context.Context, subscriptionID int64) ([]FindTagBySubscriptionRow, error) {

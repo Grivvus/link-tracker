@@ -30,11 +30,140 @@ func NewSubscriptionRepository(pool *pgxpool.Pool) repository.SubscriptionReposi
 func (repo *SubscriptionRepositorySQL) Subscribe(
 	ctx context.Context, link domain.Link, chatID int64, tags []string,
 ) (domain.Subscription, error) {
+	isReg, err := repo.isChatRegistered(ctx, chatID)
+	if err != nil {
+		return domain.Subscription{}, nil
+	}
+	if !isReg {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: no chat with thid id", repository.ErrEntityNotFound,
+		)
+	}
+	dbLink, err := repo.queries.FindLinkByURL(ctx, link.URL.String())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			dbLink, err := repo.queries.AddLink(ctx, link.URL.String())
+			if err != nil {
+				return domain.Subscription{}, fmt.Errorf(
+					"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+				)
+			}
+			link.ID = dbLink.ID
+			link.LastUpdate = dbLink.LastUpdate.Time
+		} else {
+			return domain.Subscription{}, fmt.Errorf(
+				"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+			)
+		}
+	} else {
+		link.ID = dbLink.ID
+		link.LastUpdate = dbLink.LastUpdate.Time
+	}
+	sub, err := repo.queries.Subscribe(ctx, gen.SubscribeParams{
+		LinkID: link.ID,
+		ChatID: chatID,
+	})
+	if err != nil {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
+	}
+	for _, tag := range tags {
+		dbTag, err := repo.queries.FindTag(ctx, tag)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				dbTag, err = repo.queries.AddTag(ctx, tag)
+				if err != nil {
+					return domain.Subscription{}, fmt.Errorf(
+						"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+					)
+				}
+			} else {
+				return domain.Subscription{}, fmt.Errorf(
+					"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+				)
+			}
+		}
+		err = repo.queries.AddSubscriptionTag(ctx, gen.AddSubscriptionTagParams{
+			SubscriptionID: sub.ID,
+			TagID:          dbTag.ID,
+		})
+		if err != nil {
+			return domain.Subscription{}, fmt.Errorf(
+				"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+			)
+		}
+	}
+	return domain.Subscription{
+		ID:     sub.ID,
+		ChatID: chatID,
+		LinkID: link.ID,
+		Tags:   tags,
+	}, nil
 }
 
 func (repo *SubscriptionRepositorySQL) Unsubscribe(
 	ctx context.Context, link domain.Link, chatID int64,
 ) (domain.Subscription, error) {
+	isReg, err := repo.isChatRegistered(ctx, chatID)
+	if err != nil {
+		return domain.Subscription{}, nil
+	}
+	if !isReg {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: no chat with thid id", repository.ErrEntityNotFound,
+		)
+	}
+	dbLink, err := repo.queries.FindLinkByURL(ctx, link.URL.String())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Subscription{}, fmt.Errorf(
+				"%w: can't find this url", repository.ErrEntityNotFound,
+			)
+		}
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
+	}
+	link.ID = dbLink.ID
+	sub, err := repo.queries.FindSubscriptionByLinkAndChat(
+		ctx, gen.FindSubscriptionByLinkAndChatParams{
+			ChatID: chatID,
+			LinkID: link.ID,
+		})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Subscription{}, fmt.Errorf(
+				"%w: subscription doesn't exist", repository.ErrEntityNotFound,
+			)
+		}
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
+	}
+	dbTags, err := repo.queries.FindTagBySubscription(ctx, sub.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
+	}
+	tags := make([]string, len(dbTags))
+	for i, dbTag := range dbTags {
+		tags[i] = dbTag.Name
+	}
+	_, err = repo.queries.Unsubscribe(ctx, sub.ID)
+	if err != nil {
+		return domain.Subscription{}, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
+	}
+
+	return domain.Subscription{
+		ID:     sub.ID,
+		ChatID: chatID,
+		LinkID: link.ID,
+		Tags:   tags,
+	}, nil
 }
 
 func (repo *SubscriptionRepositorySQL) GetLink(
@@ -151,7 +280,7 @@ func (repo *SubscriptionRepositorySQL) AllChatSubscriptions(
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := repo.queries.WithTx(tx)
 	subs, err := qtx.FindSubscriptionsByChat(
-		ctx, pgtype.Int8{Int64: chatID, Valid: true},
+		ctx, chatID,
 	)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: msg - %v", repository.ErrUnknownDBError, err.Error())
@@ -166,10 +295,10 @@ func (repo *SubscriptionRepositorySQL) AllChatSubscriptions(
 		}
 		tagsStr := make([]string, len(tags))
 		for i, tag := range tags {
-			tagsStr[i] = tag.Name.String
+			tagsStr[i] = tag.Name
 		}
 		domSubs[i] = domain.NewSubscription(
-			sub.ID, sub.LinkID.Int64, sub.ChatID.Int64, tagsStr,
+			sub.ID, sub.LinkID, sub.ChatID, tagsStr,
 		)
 	}
 	return domSubs, tx.Commit(ctx)
@@ -194,7 +323,7 @@ func (repo *SubscriptionRepositorySQL) AllLinkSubscriptions(
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := repo.queries.WithTx(tx)
 	subs, err := qtx.FindSubscriptionsByLink(
-		ctx, pgtype.Int8{Int64: link.ID, Valid: true},
+		ctx, link.ID,
 	)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: msg - %v", repository.ErrUnknownDBError, err.Error())
@@ -209,11 +338,24 @@ func (repo *SubscriptionRepositorySQL) AllLinkSubscriptions(
 		}
 		tagsStr := make([]string, len(tags))
 		for i, tag := range tags {
-			tagsStr[i] = tag.Name.String
+			tagsStr[i] = tag.Name
 		}
 		domSubs[i] = domain.NewSubscription(
-			sub.ID, sub.LinkID.Int64, sub.ChatID.Int64, tagsStr,
+			sub.ID, sub.LinkID, sub.ChatID, tagsStr,
 		)
 	}
 	return domSubs, tx.Commit(ctx)
+}
+
+func (repo *SubscriptionRepositorySQL) isChatRegistered(ctx context.Context, chatID int64) (bool, error) {
+	_, err := repo.queries.GetChat(ctx, chatID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf(
+			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+		)
+	}
+	return true, nil
 }

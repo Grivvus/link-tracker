@@ -9,12 +9,28 @@ import (
 	"context"
 )
 
-const deleteTagBySubscription = `-- name: DeleteTagBySubscription :exec
+const deleteTagBySubscription = `-- name: DeleteTagBySubscription :many
 DELETE FROM "subscription_tag"
     WHERE subscription_id = $1
+    RETURNING subscription_id, tag_id
 `
 
-func (q *Queries) DeleteTagBySubscription(ctx context.Context, subscriptionID int64) error {
-	_, err := q.db.Exec(ctx, deleteTagBySubscription, subscriptionID)
-	return err
+func (q *Queries) DeleteTagBySubscription(ctx context.Context, subscriptionID int64) ([]SubscriptionTag, error) {
+	rows, err := q.db.Query(ctx, deleteTagBySubscription, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubscriptionTag
+	for rows.Next() {
+		var i SubscriptionTag
+		if err := rows.Scan(&i.SubscriptionID, &i.TagID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

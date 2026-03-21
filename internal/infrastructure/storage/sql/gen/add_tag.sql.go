@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addTag = `-- name: AddTag :one
@@ -17,7 +15,7 @@ INSERT INTO "tag" (name)
     RETURNING id, name
 `
 
-func (q *Queries) AddTag(ctx context.Context, name pgtype.Text) (Tag, error) {
+func (q *Queries) AddTag(ctx context.Context, name string) (Tag, error) {
 	row := q.db.QueryRow(ctx, addTag, name)
 	var i Tag
 	err := row.Scan(&i.ID, &i.Name)

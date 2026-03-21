@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const findSubscriptionsByChat = `-- name: FindSubscriptionsByChat :many
@@ -16,7 +14,7 @@ SELECT id, link_id, chat_id from "subscription"
     WHERE chat_id = $1
 `
 
-func (q *Queries) FindSubscriptionsByChat(ctx context.Context, chatID pgtype.Int8) ([]Subscription, error) {
+func (q *Queries) FindSubscriptionsByChat(ctx context.Context, chatID int64) ([]Subscription, error) {
 	rows, err := q.db.Query(ctx, findSubscriptionsByChat, chatID)
 	if err != nil {
 		return nil, err

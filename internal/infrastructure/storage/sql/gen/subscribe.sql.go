@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const subscribe = `-- name: Subscribe :one
@@ -18,8 +16,8 @@ INSERT INTO "subscription" (link_id, chat_id)
 `
 
 type SubscribeParams struct {
-	LinkID pgtype.Int8
-	ChatID pgtype.Int8
+	LinkID int64
+	ChatID int64
 }
 
 func (q *Queries) Subscribe(ctx context.Context, arg SubscribeParams) (Subscription, error) {
