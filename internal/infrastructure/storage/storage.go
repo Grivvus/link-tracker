@@ -116,14 +116,21 @@ func (st *Storage) Unsubscribe(
 	}, nil
 }
 
-func (st *Storage) GetAllLinks(_ context.Context) ([]domain.Link, error) {
+func (st *Storage) GetAllLinks(_ context.Context) (<-chan domain.Link, error) {
 	st.rwmuLink.RLock()
 	defer st.rwmuLink.RUnlock()
 	links := make([]domain.Link, 0, len(st.linkStorage))
 	for _, v := range st.linkStorage {
 		links = append(links, v)
 	}
-	return links, nil
+	ch := make(chan domain.Link)
+	go func() {
+		for _, v := range links {
+			ch <- v
+		}
+		close(ch)
+	}()
+	return ch, nil
 }
 
 func (st *Storage) GetLink(_ context.Context, linkID int64) (domain.Link, error) {

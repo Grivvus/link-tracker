@@ -165,7 +165,7 @@ func (repo *SubscriptionRepositoryORM) GetLink(
 
 func (repo *SubscriptionRepositoryORM) GetAllLinks(
 	ctx context.Context,
-) ([]domain.Link, error) {
+) (<-chan domain.Link, error) {
 	dbLinks, err := queryMany(ctx, repo.pool, dialect.
 		Select("id", "url", "last_update").
 		From("link").
@@ -174,7 +174,16 @@ func (repo *SubscriptionRepositoryORM) GetAllLinks(
 		return nil, wrapUnknownDBError(err)
 	}
 
-	return toDomainLinks(dbLinks)
+	ch := make(chan domain.Link)
+	go func() {
+		defer close(ch)
+		for _, dbLink := range dbLinks {
+			domLink, _ := toDomainLink(dbLink)
+			ch <- domLink
+		}
+	}()
+	return ch, nil
+
 }
 
 func (repo *SubscriptionRepositoryORM) UpdateLink(

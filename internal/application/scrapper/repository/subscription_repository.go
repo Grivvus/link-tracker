@@ -15,7 +15,7 @@ type SubscriptionRepository interface {
 		ctx context.Context, link domain.Link, chatID int64,
 	) (domain.Subscription, error)
 	GetLink(ctx context.Context, linkID int64) (domain.Link, error)
-	GetAllLinks(ctx context.Context) ([]domain.Link, error)
+	GetAllLinks(ctx context.Context) (<-chan domain.Link, error)
 	UpdateLink(ctx context.Context, link domain.Link) (domain.Link, error)
 	FindLinkByURL(ctx context.Context, url *url.URL) (domain.Link, error)
 	AllChatSubscriptions(ctx context.Context, chatID int64) ([]domain.Subscription, error)

@@ -254,10 +254,10 @@ func snapshotFromSubscription(
 	}
 }
 
-func linkURLs(links []domain.Link) []string {
-	urls := make([]string, len(links))
-	for i, link := range links {
-		urls[i] = link.URL.String()
+func linkURLs(links <-chan domain.Link) []string {
+	urls := make([]string, 0)
+	for link := range links {
+		urls = append(urls, link.URL.String())
 	}
 	sort.Strings(urls)
 	return urls

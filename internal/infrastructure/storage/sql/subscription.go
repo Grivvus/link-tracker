@@ -176,26 +176,22 @@ func (repo *SubscriptionRepositorySQL) GetLink(
 
 func (repo *SubscriptionRepositorySQL) GetAllLinks(
 	ctx context.Context,
-) ([]domain.Link, error) {
-	// сейчас - запрос просто тащит все записи из таблицы
-	// а функция возвращает массив
-	// в чистовой версии надо сделать, что бы запрос в бд брал курсор
-	// а тут возвращался канал
+) (<-chan domain.Link, error) {
 	links, err := repo.queries.GetAllLinks(ctx)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf(
 			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
 		)
 	}
-	domLinks := make([]domain.Link, len(links))
-	for i, link := range links {
-		domLink, err := toDomainLink(link)
-		if err != nil {
-			return nil, err
+	ch := make(chan domain.Link)
+	go func() {
+		defer close(ch)
+		for _, link := range links {
+			domLink, _ := toDomainLink(link)
+			ch <- domLink
 		}
-		domLinks[i] = domLink
-	}
-	return domLinks, nil
+	}()
+	return ch, nil
 }
 
 func (repo *SubscriptionRepositorySQL) UpdateLink(

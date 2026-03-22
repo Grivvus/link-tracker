@@ -54,7 +54,7 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 				// for now always nil
 				return
 			}
-			for _, link := range links {
+			for link := range links {
 				poller.logger.Info("Fetch link", "url", link.URL)
 				go func(link domain.Link) {
 					subs, err := poller.subscriptionRepository.AllLinkSubscriptions(ctx, link)
