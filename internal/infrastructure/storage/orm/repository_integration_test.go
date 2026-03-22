@@ -112,6 +112,39 @@ func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_MatchesInMemoryB
 	s.Equal(expected, actual)
 }
 
+func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_GetAllLinksPagination() {
+	if s.pool == nil {
+		s.T().Skip("postgres is not available")
+	}
+
+	repos := s.newORMPair()
+	ctx := context.Background()
+	const (
+		chatID    int64 = 301
+		linkCount       = 60
+	)
+
+	require.NoError(s.T(), repos.chat.Register(ctx, chatID))
+
+	expectedURLs := make([]string, 0, linkCount)
+	for i := 0; i < linkCount; i++ {
+		rawURL := fmt.Sprintf("https://github.com/acme/project-%02d", i)
+		link := mustNewLink(s.T(), rawURL)
+		expectedURLs = append(expectedURLs, rawURL)
+
+		_, err := repos.sub.Subscribe(ctx, link, chatID, nil)
+		require.NoError(s.T(), err)
+	}
+	sort.Strings(expectedURLs)
+
+	allLinksCh, errCh := repos.sub.GetAllLinks(ctx)
+	actualURLs := linkURLs(allLinksCh)
+	errs := collectStreamErrors(errCh)
+
+	require.Empty(s.T(), errs)
+	require.Equal(s.T(), expectedURLs, actualURLs)
+}
+
 func (s *RepositoryIntegrationSuite) newORMPair() repoPair {
 	return repoPair{
 		chat: ormrepo.NewChatRepository(s.pool),
@@ -265,6 +298,16 @@ func linkURLs(links <-chan domain.Link) []string {
 	}
 	sort.Strings(urls)
 	return urls
+}
+
+func collectStreamErrors(errCh <-chan error) []error {
+	errs := make([]error, 0)
+	for err := range errCh {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
 }
 
 func sortSubscriptionSnapshots(snapshots []subscriptionSnapshot) {

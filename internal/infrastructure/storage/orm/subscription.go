@@ -14,7 +14,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
-const pageSize = 50
+const pageSize = 10
 
 type SubscriptionRepositoryORM struct {
 	pool *pgxpool.Pool
