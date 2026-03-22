@@ -50,10 +50,8 @@ func (f *fakeSubscriptionRepo) GetLink(
 
 func (f *fakeSubscriptionRepo) GetAllLinks(
 	_ context.Context,
-) (<-chan domain.Link, error) {
-	ch := make(chan domain.Link)
-	close(ch)
-	return ch, nil
+) (<-chan domain.Link, <-chan error) {
+	return nil, nil
 }
 
 func (f *fakeSubscriptionRepo) UpdateLink(

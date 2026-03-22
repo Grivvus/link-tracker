@@ -49,11 +49,12 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 		gocron.DurationJob(time.Duration(poller.pollerIntervalMinutes)*time.Minute),
 		gocron.NewTask(func() {
 			poller.logger.Info("Start polling job")
-			links, err := poller.subscriptionRepository.GetAllLinks(ctx)
-			if err != nil {
-				// for now always nil
-				return
-			}
+			links, errs := poller.subscriptionRepository.GetAllLinks(ctx)
+			go func() {
+				for err := range errs {
+					poller.logger.Error("can't fetch links", "err", err)
+				}
+			}()
 			for link := range links {
 				poller.logger.Info("Fetch link", "url", link.URL)
 				go func(link domain.Link) {

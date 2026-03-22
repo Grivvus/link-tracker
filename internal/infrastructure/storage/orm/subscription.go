@@ -14,6 +14,8 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
+const pageSize = 50
+
 type SubscriptionRepositoryORM struct {
 	pool *pgxpool.Pool
 }
@@ -165,24 +167,42 @@ func (repo *SubscriptionRepositoryORM) GetLink(
 
 func (repo *SubscriptionRepositoryORM) GetAllLinks(
 	ctx context.Context,
-) (<-chan domain.Link, error) {
-	dbLinks, err := queryMany(ctx, repo.pool, dialect.
-		Select("id", "url", "last_update").
-		From("link").
-		Prepared(true), pgx.RowToStructByName[Link])
-	if err != nil {
-		return nil, wrapUnknownDBError(err)
-	}
-
+) (<-chan domain.Link, <-chan error) {
 	ch := make(chan domain.Link)
+	errCh := make(chan error, 1)
 	go func() {
 		defer close(ch)
-		for _, dbLink := range dbLinks {
-			domLink, _ := toDomainLink(dbLink)
-			ch <- domLink
+		defer close(errCh)
+		var lastLinkID int64
+		for {
+			ds := dialect.
+				Select("id", "url", "last_update").
+				From("link").
+				Where(goqu.Ex{"id": goqu.Op{"gt": lastLinkID}}).
+				Limit(pageSize).
+				Order(goqu.C("id").Asc()).
+				Prepared(true)
+
+			dbLinks, err := queryMany(ctx, repo.pool, ds, pgx.RowToStructByName[Link])
+			if err != nil {
+				errCh <- wrapUnknownDBError(err)
+				return
+			}
+			for _, dbLink := range dbLinks {
+				domLink, err := toDomainLink(dbLink)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				ch <- domLink
+				lastLinkID = dbLink.ID
+			}
+			if len(dbLinks) < pageSize {
+				return
+			}
 		}
 	}()
-	return ch, nil
+	return ch, errCh
 
 }
 

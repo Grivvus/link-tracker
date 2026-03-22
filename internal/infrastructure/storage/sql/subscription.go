@@ -19,6 +19,8 @@ type SubscriptionRepositorySQL struct {
 	pool    *pgxpool.Pool
 }
 
+const pageSize = 10
+
 func NewSubscriptionRepository(pool *pgxpool.Pool) repository.SubscriptionRepository {
 	return &SubscriptionRepositorySQL{
 		queries: gen.New(pool),
@@ -176,22 +178,39 @@ func (repo *SubscriptionRepositorySQL) GetLink(
 
 func (repo *SubscriptionRepositorySQL) GetAllLinks(
 	ctx context.Context,
-) (<-chan domain.Link, error) {
-	links, err := repo.queries.GetAllLinks(ctx)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf(
-			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
-		)
-	}
+) (<-chan domain.Link, <-chan error) {
 	ch := make(chan domain.Link)
+	errCh := make(chan error, 1)
 	go func() {
 		defer close(ch)
-		for _, link := range links {
-			domLink, _ := toDomainLink(link)
-			ch <- domLink
+		defer close(errCh)
+		lastLinkID := int64(0)
+		for {
+			links, err := repo.queries.GetAllLinksPaginate(ctx, gen.GetAllLinksPaginateParams{
+				Limit: pageSize,
+				ID:    lastLinkID,
+			})
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				errCh <- fmt.Errorf(
+					"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+				)
+				return
+			}
+			for _, link := range links {
+				domLink, err := toDomainLink(link)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				ch <- domLink
+				lastLinkID = link.ID
+			}
+			if len(links) < pageSize {
+				return
+			}
 		}
 	}()
-	return ch, nil
+	return ch, errCh
 }
 
 func (repo *SubscriptionRepositorySQL) UpdateLink(

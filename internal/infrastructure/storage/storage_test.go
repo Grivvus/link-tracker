@@ -95,11 +95,15 @@ func TestStorage_GetAllLinks_AfterSubscriptions(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	linksChan, err := subRepo.GetAllLinks(ctx)
+	linksChan, errChan := subRepo.GetAllLinks(ctx)
+	errs := make([]error, 0)
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	require.Empty(t, errs)
 	links := make([]domain.Link, 0)
 	for link := range linksChan {
 		links = append(links, link)
 	}
-	require.NoError(t, err)
 	assert.Len(t, links, 2)
 }

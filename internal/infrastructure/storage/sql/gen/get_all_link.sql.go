@@ -9,12 +9,20 @@ import (
 	"context"
 )
 
-const getAllLinks = `-- name: GetAllLinks :many
+const getAllLinksPaginate = `-- name: GetAllLinksPaginate :many
 SELECT id, url, last_update from "link"
+    WHERE id > $1
+    ORDER BY id ASC
+    LIMIT $2
 `
 
-func (q *Queries) GetAllLinks(ctx context.Context) ([]Link, error) {
-	rows, err := q.db.Query(ctx, getAllLinks)
+type GetAllLinksPaginateParams struct {
+	ID    int64
+	Limit int32
+}
+
+func (q *Queries) GetAllLinksPaginate(ctx context.Context, arg GetAllLinksPaginateParams) ([]Link, error) {
+	rows, err := q.db.Query(ctx, getAllLinksPaginate, arg.ID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
