@@ -44,7 +44,7 @@ func NewLinkPollingUseCase(
 	}
 }
 
-func (poller *LinkPollingUseCase) Start(ctx context.Context) {
+func (poller *LinkPollingUseCase) Start(ctx context.Context) error {
 	_, err := poller.sched.NewJob(
 		gocron.DurationJob(time.Duration(poller.pollerIntervalMinutes)*time.Minute),
 		gocron.NewTask(func() {
@@ -72,23 +72,25 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) {
 					if err != nil {
 						poller.logger.Warn("can't fetch link state", "err", err)
 					}
-					poller.updateAndNotify(ctx, link, subsChatIDs, lstate)
+					if lstate.UpdatedAt.After(link.LastUpdate) {
+						poller.updateAndNotify(ctx, link, subsChatIDs, lstate)
+					}
 				}(link)
 			}
 		}),
 	)
 	if err != nil {
-		poller.logger.Error("can't create job", "err", err)
-		return
+		return err
 	}
 	poller.sched.Start()
+	return nil
 }
 
 func (poller *LinkPollingUseCase) updateAndNotify(
 	ctx context.Context, link domain.Link,
 	subsChatIDs []int64, linkState model.LinkState,
 ) {
-	if link.LastUpdate.Before(linkState.UpdatedAt) {
+	if linkState.UpdatedAt.After(link.LastUpdate) {
 		// something new
 		link.LastUpdate = linkState.UpdatedAt
 		_, errU := poller.subscriptionRepository.UpdateLink(ctx, link)

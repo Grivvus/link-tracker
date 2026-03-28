@@ -12,7 +12,8 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
 
-const stackoverflowAPIURL = "https://api.stackexchange.com/2.3/questions"
+const stackoverflowAPIURL = "https://api.stackexchange.com"
+const stackoverflowAPIVersion = 2.3
 const stackoverflowSite = "stackoverflow"
 
 type StackoverflowClient struct {
@@ -73,6 +74,8 @@ func (c *StackoverflowClient) FetchQuestion(
 
 func buildStackoverflowURL(info domain.StackoverflowURLInfo) string {
 	return fmt.Sprintf(
-		"%s/%d?%s", stackoverflowAPIURL, info.QuestionID, stackoverflowSite,
+		"%s/%f/%s/%d?%s",
+		stackoverflowAPIURL, stackoverflowAPIVersion,
+		"questions", info.QuestionID, stackoverflowSite,
 	)
 }

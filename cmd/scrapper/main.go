@@ -87,15 +87,14 @@ func main() {
 		return
 	}
 	botPort := adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
-	_ = botPort // needed, when i implement notifier
 
-	chatRepo, subsciptionRepo, err := newRepositories(ctx, cfg)
+	chatRepo, subscriptionRepo, err := newRepositories(ctx, cfg)
 	if err != nil {
 		logger.Error("can't init repository", "err", err)
 		exitCode = 1
 		return
 	}
-	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subsciptionRepo)
+	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subscriptionRepo)
 	var httpServInterface scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
 	h := scrapper.HandlerFromMux(httpServInterface, mux)
@@ -116,9 +115,14 @@ func main() {
 	}
 	poller := usecase.NewLinkPollingUseCase(
 		logger, sched, linkStatePort, botPort,
-		subsciptionRepo, chatRepo, int64(cfg.PollerIntervalMinutes),
+		subscriptionRepo, chatRepo, int64(cfg.PollerIntervalMinutes),
 	)
-	poller.Start(ctx)
+	err = poller.Start(ctx)
+	if err != nil {
+		logger.Error("can't start polling service", "err", err)
+		exitCode = 1
+		return
+	}
 
 	go func() {
 		logger.Info("server has been started on", "addr", httpServer.Addr)

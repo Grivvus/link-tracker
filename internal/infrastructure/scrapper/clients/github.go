@@ -12,7 +12,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
 
-const githubAPIURL = "https://api.github.com/repos"
+const githubAPIURL = "https://api.github.com"
 
 type GitHubClient struct {
 	logger     *slog.Logger
@@ -68,6 +68,6 @@ func (g *GitHubClient) FetchRepo(
 
 func buildGitHubURL(info domain.GitHubURLInfo) string {
 	return fmt.Sprintf(
-		"%s/%s/%s", githubAPIURL, info.Username, info.RepoName,
+		"%s/%s/%s/%s", githubAPIURL, "repos", info.Username, info.RepoName,
 	)
 }
