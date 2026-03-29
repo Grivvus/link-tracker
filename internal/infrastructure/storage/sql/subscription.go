@@ -37,7 +37,7 @@ func (repo *SubscriptionRepositorySQL) Subscribe(
 	}
 	if !isReg {
 		return domain.Subscription{}, fmt.Errorf(
-			"%w: no chat with thid id", repository.ErrEntityNotFound,
+			"%w: no chat with this id", repository.ErrEntityNotFound,
 		)
 	}
 	link, err = repo.getOrCreateLink(ctx, link)
@@ -102,7 +102,7 @@ func (repo *SubscriptionRepositorySQL) Unsubscribe(
 	}
 	if !isReg {
 		return domain.Subscription{}, fmt.Errorf(
-			"%w: no chat with thid id", repository.ErrEntityNotFound,
+			"%w: no chat with this id", repository.ErrEntityNotFound,
 		)
 	}
 	return withTx(ctx, repo.pool, repo.queries, func(queries *gen.Queries) (domain.Subscription, error) {
@@ -166,7 +166,7 @@ func (repo *SubscriptionRepositorySQL) GetLink(
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Link{}, fmt.Errorf(
-				"%w: can't find link with thid id", repository.ErrEntityNotFound,
+				"%w: can't find link with this id", repository.ErrEntityNotFound,
 			)
 		}
 		return domain.Link{}, fmt.Errorf(
@@ -261,7 +261,7 @@ func (repo *SubscriptionRepositorySQL) AllChatSubscriptions(
 	}
 	if !isReg {
 		return nil, fmt.Errorf(
-			"%w: no chat with thid id", repository.ErrEntityNotFound,
+			"%w: no chat with this id", repository.ErrEntityNotFound,
 		)
 	}
 	return withTx(ctx, repo.pool, repo.queries, func(queries *gen.Queries) ([]domain.Subscription, error) {

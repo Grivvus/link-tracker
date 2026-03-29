@@ -90,23 +90,24 @@ func (poller *LinkPollingUseCase) updateAndNotify(
 	ctx context.Context, link domain.Link,
 	subsChatIDs []int64, linkState model.LinkState,
 ) {
-	if linkState.UpdatedAt.After(link.LastUpdate) {
-		// something new
-		link.LastUpdate = linkState.UpdatedAt
-		_, errU := poller.subscriptionRepository.UpdateLink(ctx, link)
-		errN := poller.botPort.NotifyAboutUpdatedLinks(
-			ctx, model.LinkUpdatedEvent{
-				ChatIDs:     subsChatIDs,
-				LinkID:      link.ID,
-				RawURL:      link.URL.String(),
-				Description: "something new",
-			},
-		)
-		if errU != nil {
-			poller.logger.Error("can't update link state", "err", errU)
-		}
-		if errN != nil {
-			poller.logger.Error("can't notify about update", "err", errN)
-		}
+	if !linkState.UpdatedAt.After(link.LastUpdate) {
+		return
+	}
+	// something new
+	link.LastUpdate = linkState.UpdatedAt
+	_, errU := poller.subscriptionRepository.UpdateLink(ctx, link)
+	errN := poller.botPort.NotifyAboutUpdatedLinks(
+		ctx, model.LinkUpdatedEvent{
+			ChatIDs:     subsChatIDs,
+			LinkID:      link.ID,
+			RawURL:      link.URL.String(),
+			Description: "something new",
+		},
+	)
+	if errU != nil {
+		poller.logger.Error("can't update link state", "err", errU)
+	}
+	if errN != nil {
+		poller.logger.Error("can't notify about update", "err", errN)
 	}
 }

@@ -36,7 +36,7 @@ func (repo *SubscriptionRepositoryORM) Subscribe(
 		}
 		if !isReg {
 			return domain.Subscription{}, fmt.Errorf(
-				"%w: no chat with thid id", repository.ErrEntityNotFound,
+				"%w: no chat with this id", repository.ErrEntityNotFound,
 			)
 		}
 
@@ -93,7 +93,7 @@ func (repo *SubscriptionRepositoryORM) Unsubscribe(
 		}
 		if !isReg {
 			return domain.Subscription{}, fmt.Errorf(
-				"%w: no chat with thid id", repository.ErrEntityNotFound,
+				"%w: no chat with this id", repository.ErrEntityNotFound,
 			)
 		}
 
@@ -156,7 +156,7 @@ func (repo *SubscriptionRepositoryORM) GetLink(
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Link{}, fmt.Errorf(
-				"%w: can't find link with thid id", repository.ErrEntityNotFound,
+				"%w: can't find link with this id", repository.ErrEntityNotFound,
 			)
 		}
 		return domain.Link{}, wrapUnknownDBError(err)
@@ -262,14 +262,29 @@ func (repo *SubscriptionRepositoryORM) AllChatSubscriptions(
 		}
 		if !isReg {
 			return nil, fmt.Errorf(
-				"%w: no chat with thid id", repository.ErrEntityNotFound,
+				"%w: no chat with this id", repository.ErrEntityNotFound,
 			)
 		}
 
 		return repo.loadSubscriptionsWithTags(ctx, tx, dialect.
-			Select("id", "link_id", "chat_id").
+			Select(
+				goqu.I("subscription.id").As("subscription_id"),
+				goqu.I("subscription.link_id").As("link_id"),
+				goqu.I("subscription.chat_id").As("chat_id"),
+				goqu.I("tag.name").As("tag_name"),
+			).
 			From("subscription").
-			Where(goqu.Ex{"chat_id": chatID}).
+			LeftJoin(
+				goqu.T("subscription_tag"), goqu.On(goqu.Ex{
+					"subscription.id": goqu.I("subscription_tag.subscription_id"),
+				})).
+			LeftJoin(
+				goqu.T("tag"),
+				goqu.On(goqu.Ex{
+					"subscription_tag.tag_id": goqu.I("tag.id"),
+				}),
+			).
+			Where(goqu.Ex{"subscription.chat_id": chatID}).
 			Prepared(true))
 	})
 }
@@ -288,9 +303,24 @@ func (repo *SubscriptionRepositoryORM) AllLinkSubscriptions(
 
 	return withTx(ctx, repo.pool, func(tx pgx.Tx) ([]domain.Subscription, error) {
 		return repo.loadSubscriptionsWithTags(ctx, tx, dialect.
-			Select("id", "link_id", "chat_id").
+			Select(
+				goqu.I("subscription.id").As("subscription_id"),
+				goqu.I("subscription.link_id").As("link_id"),
+				goqu.I("subscription.chat_id").As("chat_id"),
+				goqu.I("tag.name").As("tag_name"),
+			).
 			From("subscription").
-			Where(goqu.Ex{"link_id": linkID}).
+			LeftJoin(
+				goqu.T("subscription_tag"), goqu.On(goqu.Ex{
+					"subscription.id": goqu.I("subscription_tag.subscription_id"),
+				})).
+			LeftJoin(
+				goqu.T("tag"),
+				goqu.On(goqu.Ex{
+					"subscription_tag.tag_id": goqu.I("tag.id"),
+				}),
+			).
+			Where(goqu.Ex{"subscription.link_id": linkID}).
 			Prepared(true))
 	})
 }
@@ -420,25 +450,29 @@ func (repo *SubscriptionRepositoryORM) findTagsBySubscription(
 func (repo *SubscriptionRepositoryORM) loadSubscriptionsWithTags(
 	ctx context.Context, db dbRunner, ds *goqu.SelectDataset,
 ) ([]domain.Subscription, error) {
-	dbSubs, err := queryMany(ctx, db, ds, pgx.RowToStructByName[Subscription])
+	dbSubsWithTags, err := queryMany(ctx, db, ds, pgx.RowToStructByName[SubscriptionWithTag])
 	if err != nil {
 		return nil, wrapUnknownDBError(err)
 	}
 
-	domSubs := make([]domain.Subscription, len(dbSubs))
-	for i, dbSub := range dbSubs {
-		dbTags, err := repo.findTagsBySubscription(ctx, db, dbSub.ID)
-		if err != nil {
-			return nil, err
+	domSubs := make(map[int64]*domain.Subscription)
+	for _, dbSub := range dbSubsWithTags {
+		if _, ok := domSubs[dbSub.ID]; !ok {
+			domSubs[dbSub.ID] = &domain.Subscription{
+				ID:     dbSub.ID,
+				LinkID: dbSub.LinkID,
+				ChatID: dbSub.ChatID,
+			}
 		}
-
-		tags := make([]string, len(dbTags))
-		for j, dbTag := range dbTags {
-			tags[j] = dbTag.Name
+		if dbSub.TagName == nil {
+			continue
 		}
-
-		domSubs[i] = toDomainSubscription(dbSub, tags)
+		domSubs[dbSub.ID].Tags = append(domSubs[dbSub.ID].Tags, *dbSub.TagName)
 	}
 
-	return domSubs, nil
+	domSubsSl := make([]domain.Subscription, 0, len(domSubs))
+	for _, dbSub := range domSubs {
+		domSubsSl = append(domSubsSl, *dbSub)
+	}
+	return domSubsSl, nil
 }

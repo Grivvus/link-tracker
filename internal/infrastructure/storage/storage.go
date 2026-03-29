@@ -141,7 +141,7 @@ func (st *Storage) GetLink(_ context.Context, linkID int64) (domain.Link, error)
 	link, ok := st.linkStorage[linkID]
 	if !ok {
 		return link, fmt.Errorf(
-			"%w: can't find link with thid id", repository.ErrEntityNotFound,
+			"%w: can't find link with this id", repository.ErrEntityNotFound,
 		)
 	}
 	return link, nil

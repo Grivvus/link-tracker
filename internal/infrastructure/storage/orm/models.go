@@ -16,6 +16,13 @@ type Subscription struct {
 	ChatID int64 `db:"chat_id"`
 }
 
+type SubscriptionWithTag struct {
+	ID      int64   `db:"subscription_id"`
+	LinkID  int64   `db:"link_id"`
+	ChatID  int64   `db:"chat_id"`
+	TagName *string `db:"tag_name"`
+}
+
 type Tag struct {
 	ID   int64  `db:"id"`
 	Name string `db:"name"`

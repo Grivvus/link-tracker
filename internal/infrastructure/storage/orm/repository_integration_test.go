@@ -152,6 +152,41 @@ func (s *RepositoryIntegrationSuite) newORMPair() repoPair {
 	}
 }
 
+func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_EmptyTagsArePreserved() {
+	if s.pool == nil {
+		s.T().Skip("postgres is not available")
+	}
+
+	repos := s.newORMPair()
+	ctx := context.Background()
+	const chatID int64 = 401
+
+	require.NoError(s.T(), repos.chat.Register(ctx, chatID))
+
+	link := mustNewLink(s.T(), "https://github.com/acme/project-no-tags")
+	_, err := repos.sub.Subscribe(ctx, link, chatID, []string{})
+	require.NoError(s.T(), err)
+
+	chatSubs, err := repos.sub.AllChatSubscriptions(ctx, chatID)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), chatSubs, 1)
+
+	sub := chatSubs[0]
+	require.NotZero(s.T(), sub.ID)
+	require.NotZero(s.T(), sub.LinkID)
+	require.Equal(s.T(), chatID, sub.ChatID)
+	require.Empty(s.T(), sub.Tags)
+
+	gotLink, err := repos.sub.GetLink(ctx, sub.LinkID)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), link.URL.String(), gotLink.URL.String())
+
+	linkSubs, err := repos.sub.AllLinkSubscriptions(ctx, link)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), linkSubs, 1)
+	require.Empty(s.T(), linkSubs[0].Tags)
+}
+
 func newInMemoryPair() repoPair {
 	st := memstorage.New()
 	return repoPair{
