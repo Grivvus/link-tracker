@@ -265,29 +265,30 @@ func (repo *SubscriptionRepositorySQL) AllChatSubscriptions(
 		)
 	}
 	return withTx(ctx, repo.pool, repo.queries, func(queries *gen.Queries) ([]domain.Subscription, error) {
-		subs, err := queries.FindSubscriptionsByChat(
-			ctx, chatID,
-		)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w: msg - %v", repository.ErrUnknownDBError, err.Error())
+		subsWithTags, err := queries.FindSubscriptionsWithTagsByChat(ctx, chatID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: msg - %v", repository.ErrUnknownDBError, err)
 		}
-		domSubs := make([]domain.Subscription, len(subs))
-		for i, sub := range subs {
-			tags, err := queries.FindTagBySubscription(ctx, sub.ID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf(
-					"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
-				)
+		domSubs := make(map[int64]*domain.Subscription)
+		for _, dbSub := range subsWithTags {
+			if _, ok := domSubs[dbSub.ID]; !ok {
+				domSubs[dbSub.ID] = &domain.Subscription{
+					ID:     dbSub.ID,
+					LinkID: dbSub.LinkID,
+					ChatID: dbSub.ChatID,
+				}
 			}
-			tagsStr := make([]string, len(tags))
-			for i, tag := range tags {
-				tagsStr[i] = tag.Name
+			if !dbSub.Name.Valid {
+				continue
 			}
-			domSubs[i] = domain.NewSubscription(
-				sub.ID, sub.LinkID, sub.ChatID, tagsStr,
-			)
+			domSubs[dbSub.ID].Tags = append(domSubs[dbSub.ID].Tags, dbSub.Name.String)
 		}
-		return domSubs, nil
+
+		domSubsSl := make([]domain.Subscription, 0, len(domSubs))
+		for _, dbSub := range domSubs {
+			domSubsSl = append(domSubsSl, *dbSub)
+		}
+		return domSubsSl, nil
 	})
 }
 
@@ -302,29 +303,30 @@ func (repo *SubscriptionRepositorySQL) AllLinkSubscriptions(
 		}
 	}
 	return withTx(ctx, repo.pool, repo.queries, func(queries *gen.Queries) ([]domain.Subscription, error) {
-		subs, err := queries.FindSubscriptionsByLink(ctx, link.ID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf(
-				"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
-			)
+		subsWithTags, err := queries.FindSubscriptionsWithTagsByLink(ctx, link.ID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: msg - %v", repository.ErrUnknownDBError, err)
 		}
-		domSubs := make([]domain.Subscription, len(subs))
-		for i, sub := range subs {
-			tags, err := queries.FindTagBySubscription(ctx, sub.ID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf(
-					"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
-				)
+		domSubs := make(map[int64]*domain.Subscription)
+		for _, dbSub := range subsWithTags {
+			if _, ok := domSubs[dbSub.ID]; !ok {
+				domSubs[dbSub.ID] = &domain.Subscription{
+					ID:     dbSub.ID,
+					LinkID: dbSub.LinkID,
+					ChatID: dbSub.ChatID,
+				}
 			}
-			tagsStr := make([]string, len(tags))
-			for i, tag := range tags {
-				tagsStr[i] = tag.Name
+			if !dbSub.Name.Valid {
+				continue
 			}
-			domSubs[i] = domain.NewSubscription(
-				sub.ID, sub.LinkID, sub.ChatID, tagsStr,
-			)
+			domSubs[dbSub.ID].Tags = append(domSubs[dbSub.ID].Tags, dbSub.Name.String)
 		}
-		return domSubs, nil
+
+		domSubsSl := make([]domain.Subscription, 0, len(domSubs))
+		for _, dbSub := range domSubs {
+			domSubsSl = append(domSubsSl, *dbSub)
+		}
+		return domSubsSl, nil
 	})
 }
 
