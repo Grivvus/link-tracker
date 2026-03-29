@@ -68,13 +68,14 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) error {
 						subsChatIDs = append(subsChatIDs, sub.ChatID)
 					}
 
-					lstate, err := poller.linkState.Fetch(ctx, link)
+					updates, err := poller.linkState.Fetch(ctx, link)
 					if err != nil {
 						poller.logger.Warn("can't fetch link state", "err", err)
 					}
-					if lstate.UpdatedAt.After(link.LastUpdate) {
-						poller.updateAndNotify(ctx, link, subsChatIDs, lstate)
+					if updates == nil || len(updates) == 0 {
+						return
 					}
+					poller.updateAndNotify(ctx, link, subsChatIDs, updates)
 				}(link)
 			}
 		}),
@@ -88,26 +89,34 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) error {
 
 func (poller *LinkPollingUseCase) updateAndNotify(
 	ctx context.Context, link domain.Link,
-	subsChatIDs []int64, linkState model.LinkState,
+	subsChatIDs []int64, updates []model.LinkState,
 ) {
-	if !linkState.UpdatedAt.After(link.LastUpdate) {
+	youngestEvent := updates[0].UpdatedAt
+	for _, update := range updates {
+		if update.UpdatedAt.After(youngestEvent) {
+			youngestEvent = update.UpdatedAt
+		}
+	}
+	if !youngestEvent.After(link.LastUpdate) {
 		return
 	}
 	// something new
-	link.LastUpdate = linkState.UpdatedAt
+	link.LastUpdate = youngestEvent
 	_, errU := poller.subscriptionRepository.UpdateLink(ctx, link)
-	errN := poller.botPort.NotifyAboutUpdatedLinks(
-		ctx, model.LinkUpdatedEvent{
-			ChatIDs:     subsChatIDs,
-			LinkID:      link.ID,
-			RawURL:      link.URL.String(),
-			Description: "something new",
-		},
-	)
 	if errU != nil {
 		poller.logger.Error("can't update link state", "err", errU)
 	}
-	if errN != nil {
-		poller.logger.Error("can't notify about update", "err", errN)
+	for _, update := range updates {
+		errN := poller.botPort.NotifyAboutUpdatedLinks(
+			ctx, model.LinkUpdatedEvent{
+				ChatIDs:     subsChatIDs,
+				LinkID:      link.ID,
+				RawURL:      link.URL.String(),
+				Description: update.UpdateInfo,
+			},
+		)
+		if errN != nil {
+			poller.logger.Error("can't notify about update", "err", errN)
+		}
 	}
 }

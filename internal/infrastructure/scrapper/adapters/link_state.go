@@ -9,6 +9,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
 )
 
@@ -26,86 +27,150 @@ func NewLinkStateAdapter(logger *slog.Logger) ports.LinkStatePort {
 	}
 }
 
-func (a *LinkStateAdapter) Fetch(ctx context.Context, link domain.Link) (model.LinkState, error) {
+func (a *LinkStateAdapter) Fetch(ctx context.Context, link domain.Link) ([]model.LinkState, error) {
 	switch link.URL.Hostname() {
 	case "github.com":
 		return a.fetchGH(ctx, link)
 	case "stackoverflow.com":
 		return a.fetchStackoverflow(ctx, link)
 	default:
-		return model.LinkState{}, fmt.Errorf("%w: url: %s", ports.ErrBadURL, link.URL.String())
+		return nil, fmt.Errorf("%w: url: %s", ports.ErrBadURL, link.URL.String())
 	}
 }
 
-func (a *LinkStateAdapter) fetchGH(ctx context.Context, link domain.Link) (model.LinkState, error) {
+func (a *LinkStateAdapter) fetchGH(ctx context.Context, link domain.Link) ([]model.LinkState, error) {
 	isGH, ghinfo := link.GitHubURLInfo()
 	if !isGH {
-		return model.LinkState{}, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: exected valid GitHubURLInfo", ports.ErrBadParams,
 		)
 	}
 	ghDTO, err := a.ghClient.FetchRepo(ctx, *ghinfo)
 	if err != nil {
-		return model.LinkState{}, err
+		return nil, err
 	}
-	return model.LinkState{
+	return []model.LinkState{{
 		UpdateInfo: "abcd",
 		UpdatedAt:  ghDTO.UpdatedAt,
 		Title:      ghDTO.Name,
-	}, nil
+	}}, nil
 }
 
 func (a *LinkStateAdapter) fetchStackoverflow(
 	ctx context.Context, link domain.Link,
-) (model.LinkState, error) {
+) ([]model.LinkState, error) {
 	isSt, stinfo := link.StackoverflowURLInfo()
 	if !isSt {
-		return model.LinkState{}, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: expected valid StackoverflowURLInfo",
 			ports.ErrBadParams,
 		)
 	}
 	stoverflowDTO, err := a.stackoverflowClient.FetchQuestion(ctx, *stinfo)
 	if err != nil {
-		return model.LinkState{}, err
+		return nil, err
 	}
-	if !stoverflowDTO.LastActivityDate.After(link.LastUpdate) {
+	lastActivityDate := time.Unix(stoverflowDTO.LastActivityDate, 0)
+	if !lastActivityDate.After(link.LastUpdate) {
 		// no update since last check
 		// zero value for UpdatedAt is fine
 		// it will be checked at the next step in LinkPollingUseCase
-		return model.LinkState{}, nil
+		return []model.LinkState{}, nil
 	}
-	newComments, err := a.newCommentsSince(ctx, stinfo.QuestionID, link.LastUpdate)
-	_ = newComments
+	newComments, err := a.newCommentsSince(
+		ctx, stinfo.QuestionID, stoverflowDTO.Title, link.LastUpdate,
+	)
 	if err != nil {
-		return model.LinkState{}, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: can't fetch new comments. Initail err: %w",
 			ports.ErrBadResponse, err,
 		)
 	}
-	newAnswers, err := a.newAnswersSince(ctx, stinfo.QuestionID, link.LastUpdate)
-	_ = newAnswers
+	newAnswers, err := a.newAnswersSince(
+		ctx, stinfo.QuestionID, stoverflowDTO.Title, link.LastUpdate,
+	)
 	if err != nil {
-		return model.LinkState{}, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: can't fetch new answers. Initail err: %w",
 			ports.ErrBadResponse, err,
 		)
 	}
-	return model.LinkState{
-		UpdateInfo: "abcd",
-		UpdatedAt:  stoverflowDTO.LastActivityDate,
-		Title:      stoverflowDTO.Title,
-	}, nil
+	updates := make([]model.LinkState, 0, len(newComments)+len(newAnswers))
+	for _, comment := range newComments {
+		updates = append(updates, model.LinkState{
+			UpdateInfo: comment.CommentPreview,
+			UpdatedAt:  comment.CreatedAt,
+			Title:      comment.QuestionName,
+		})
+	}
+	for _, answer := range newAnswers {
+		updates = append(updates, model.LinkState{
+			UpdateInfo: answer.AnswerPreview,
+			UpdatedAt:  answer.CreatedAt,
+			Title:      answer.QuestionName,
+		})
+	}
+	return updates, nil
 }
 
 func (a *LinkStateAdapter) newCommentsSince(
-	ctx context.Context, questionID int64, since time.Time,
+	ctx context.Context, questionID int64,
+	questionTitle string, since time.Time,
 ) ([]model.StackoverflowNewComment, error) {
-	return []model.StackoverflowNewComment{}, nil
+	comments, err := a.stackoverflowClient.FetchQuestionComments(ctx, questionID)
+	if err != nil {
+		return nil, err
+	}
+	newComments := make([]model.StackoverflowNewComment, 0)
+	for _, comment := range comments {
+		createdAt := time.Unix(comment.CreationDate, 0)
+		if !createdAt.After(since) {
+			break
+		}
+		newComments = append(newComments, model.StackoverflowNewComment{
+			QuestionName:   questionTitle,
+			CreatedAt:      createdAt,
+			LeftByUser:     checkAndReturnUsername(comment.Owner),
+			CommentPreview: reduceBody(comment.Body),
+		})
+	}
+	return newComments, nil
 }
 
 func (a *LinkStateAdapter) newAnswersSince(
-	ctx context.Context, questionID int64, since time.Time,
+	ctx context.Context, questionID int64,
+	questionTitle string, since time.Time,
 ) ([]model.StackoverflowNewAnswer, error) {
-	return []model.StackoverflowNewAnswer{}, nil
+	answers, err := a.stackoverflowClient.FetchQuestionAnswers(ctx, questionID)
+	if err != nil {
+		return nil, err
+	}
+	newAnswers := make([]model.StackoverflowNewAnswer, 0)
+	for _, answer := range answers {
+		createdAt := time.Unix(answer.CreationDate, 0)
+		if !createdAt.After(since) {
+			break
+		}
+		newAnswers = append(newAnswers, model.StackoverflowNewAnswer{
+			QuestionName:  questionTitle,
+			LeftByUser:    checkAndReturnUsername(answer.Owner),
+			CreatedAt:     createdAt,
+			AnswerPreview: reduceBody(answer.Body),
+		})
+	}
+	return newAnswers, nil
+}
+
+func reduceBody(full string) string {
+	if len(full) <= 200 {
+		return full
+	}
+	return full[:200]
+}
+
+func checkAndReturnUsername(user *dto.ShallowUser) string {
+	if user == nil {
+		return "unknown"
+	}
+	return user.Username
 }

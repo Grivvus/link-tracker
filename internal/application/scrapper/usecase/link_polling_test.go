@@ -79,7 +79,7 @@ func (f *fakeSubscriptionRepo) AllLinkSubscriptions(
 	return nil, nil
 }
 
-func testUsecaseLogger() *slog.Logger {
+func testUseCaseLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
@@ -89,7 +89,7 @@ func TestLinkPollingUseCase_UpdateAndNotify_NewerUpdate(t *testing.T) {
 	repo := &fakeSubscriptionRepo{}
 	bot := &fakeBotPort{}
 	poller := LinkPollingUseCase{
-		logger:                 testUsecaseLogger(),
+		logger:                 testUseCaseLogger(),
 		subscriptionRepository: repo,
 		botPort:                bot,
 	}
@@ -104,7 +104,7 @@ func TestLinkPollingUseCase_UpdateAndNotify_NewerUpdate(t *testing.T) {
 		UpdatedAt: time.Unix(20, 0),
 	}
 
-	poller.updateAndNotify(context.Background(), link, expectedChatIDs, newState)
+	poller.updateAndNotify(context.Background(), link, expectedChatIDs, []model.LinkState{newState})
 
 	require.Len(t, repo.updatedLinks, 1)
 	require.Len(t, bot.events, 1)
@@ -120,7 +120,7 @@ func TestLinkPollingUseCase_UpdateAndNotify_NoChanges(t *testing.T) {
 	repo := &fakeSubscriptionRepo{}
 	bot := &fakeBotPort{}
 	poller := LinkPollingUseCase{
-		logger:                 testUsecaseLogger(),
+		logger:                 testUseCaseLogger(),
 		subscriptionRepository: repo,
 		botPort:                bot,
 	}
@@ -132,7 +132,7 @@ func TestLinkPollingUseCase_UpdateAndNotify_NoChanges(t *testing.T) {
 	state := model.LinkState{
 		UpdatedAt: time.Unix(20, 0),
 	}
-	poller.updateAndNotify(context.Background(), link, []int64{1}, state)
+	poller.updateAndNotify(context.Background(), link, []int64{1}, []model.LinkState{state})
 
 	assert.Empty(t, repo.updatedLinks)
 	assert.Empty(t, bot.events)

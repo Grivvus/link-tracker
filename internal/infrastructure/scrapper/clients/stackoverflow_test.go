@@ -10,6 +10,90 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
+func TestStackoverflowClient_FetchQuestion(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger())
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return newHTTPResponse(http.StatusOK, `{
+				"last_activity_date": 1710075600,
+				"link": "https://stackoverflow.com/questions/123",
+				"title": "Example question"
+			}`), nil
+		}),
+	}
+
+	got, err := client.FetchQuestion(
+		context.TODO(),
+		domain.StackoverflowURLInfo{
+			QuestionID: 123,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "https://stackoverflow.com/questions/123", got.URL)
+	require.Equal(t, "Example question", got.Title)
+	require.Equal(t, int64(1710075600), got.LastActivityDate)
+}
+
+func TestStackoverflowClient_FetchQuestionComments_HappyPath(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger())
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return newHTTPResponse(http.StatusOK, `{
+				"items": [{
+					"comment_id": 11,
+					"creation_date": 1710075601,
+					"body": "comment body",
+					"owner": {
+						"display_name": "alice",
+						"user_id": 42
+					}
+				}]
+			}`), nil
+		}),
+	}
+
+	got, err := client.FetchQuestionComments(context.TODO(), 123)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, int64(11), got[0].CommentID)
+	require.Equal(t, "comment body", got[0].Body)
+	require.Equal(t, int64(1710075601), got[0].CreationDate)
+	require.NotNil(t, got[0].Owner)
+	require.Equal(t, "alice", got[0].Owner.Username)
+	require.Equal(t, int64(42), got[0].Owner.UserID)
+}
+
+func TestStackoverflowClient_FetchQuestionAnswers(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger())
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return newHTTPResponse(http.StatusOK, `{
+				"items": [{
+					"answer_id": 77,
+					"creation_date": 1710075602,
+					"last_activity_date": 1710075700,
+					"body": "answer body",
+					"owner": {
+						"display_name": "bob",
+						"user_id": 84
+					}
+				}]
+			}`), nil
+		}),
+	}
+
+	got, err := client.FetchQuestionAnswers(context.TODO(), 123)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, int64(77), got[0].AnswerID)
+	require.Equal(t, "answer body", got[0].Body)
+	require.Equal(t, int64(1710075602), got[0].CreationDate)
+	require.Equal(t, int64(1710075700), got[0].LastActivityDate)
+	require.NotNil(t, got[0].Owner)
+	require.Equal(t, "bob", got[0].Owner.Username)
+	require.Equal(t, int64(84), got[0].Owner.UserID)
+}
+
 func TestStackoverflowClient_FetchQuestion_Non2xxResponse(t *testing.T) {
 	client := NewStackoverflowClient(testClientLogger())
 	client.httpClient = &http.Client{
