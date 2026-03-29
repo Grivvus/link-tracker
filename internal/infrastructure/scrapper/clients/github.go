@@ -2,10 +2,10 @@ package clients
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
@@ -13,6 +13,8 @@ import (
 )
 
 const githubAPIURL = "https://api.github.com"
+const githubAPIVersion = "2026-03-10"
+const baseQueryParameters = "sort=created&direction=desc&state=open"
 
 type GitHubClient struct {
 	logger     *slog.Logger
@@ -31,43 +33,64 @@ func (g *GitHubClient) FetchRepo(
 ) (dto.GithubRepository, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildGitHubURL(info), nil)
 	if err != nil {
-		g.logger.Error("error creating request", "url info", info)
+		g.logger.Error("error creating request", "err", err)
 		return dto.GithubRepository{}, fmt.Errorf(
 			"%w: %w", ports.ErrBadParams, err,
 		)
 	}
-	g.logger.Info("request was built", "url", req.URL.String())
 	req.Header.Add("Accept", "application/vnd.github+json")
-	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		g.logger.Error("error executing request", "url info", info, "err", err)
-		return dto.GithubRepository{}, fmt.Errorf(
-			"%w: exect error: %w", ports.ErrBadResponse, err,
-		)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	g.logger.Info("got response", "code", resp.StatusCode)
-	if resp.StatusCode >= http.StatusBadRequest {
-		g.logger.Error(
-			"getting error-response",
-			"url info", info, "status_code", resp.StatusCode,
-		)
-		return dto.GithubRepository{}, ports.ErrBadResponse
-	}
+	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
+	return doRequestAndMapResult[dto.GithubRepository](g.logger, g.httpClient, req)
+}
 
-	respDTO := dto.GithubRepository{}
-	err = json.NewDecoder(resp.Body).Decode(&respDTO)
+func (g *GitHubClient) FetchNewIssues(
+	ctx context.Context, info domain.GitHubURLInfo, since time.Time,
+) ([]dto.Issue, error) {
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodGet,
+		buildGitHubURLQueryNewIssues(info, since), nil,
+	)
 	if err != nil {
-		return dto.GithubRepository{}, fmt.Errorf(
-			"%w: can't decode response", ports.ErrBadResponse,
-		)
+		g.logger.Error("error creating request", "err", err)
+		return nil, fmt.Errorf("%w: %w", ports.ErrBadParams, err)
 	}
-	return respDTO, nil
+	req.Header.Add("Accept", "application/vnd.github+json")
+	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
+	return doRequestAndMapResult[[]dto.Issue](g.logger, g.httpClient, req)
+}
+
+func (g *GitHubClient) FetchPRs(
+	ctx context.Context, info domain.GitHubURLInfo,
+) ([]dto.PullRequest, error) {
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodGet,
+		buildGitHubURLQueryPRs(info), nil,
+	)
+	if err != nil {
+		g.logger.Error("error creating request", "err", err)
+		return nil, fmt.Errorf("%w: %w", ports.ErrBadParams, err)
+	}
+	req.Header.Add("Accept", "application/vnd.github+json")
+	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
+	return doRequestAndMapResult[[]dto.PullRequest](g.logger, g.httpClient, req)
 }
 
 func buildGitHubURL(info domain.GitHubURLInfo) string {
 	return fmt.Sprintf(
-		"%s/%s/%s/%s", githubAPIURL, "repos", info.Username, info.RepoName,
+		"%s/repos/%s/%s", githubAPIURL, info.Username, info.RepoName,
 	)
+}
+
+func buildGitHubURLQueryNewIssues(
+	info domain.GitHubURLInfo, since time.Time,
+) string {
+	return fmt.Sprintf(
+		"%s/issues?%s&since=%s",
+		buildGitHubURL(info), baseQueryParameters,
+		since.Format(time.RFC3339),
+	)
+}
+
+func buildGitHubURLQueryPRs(info domain.GitHubURLInfo) string {
+	return fmt.Sprintf(":%s/pulls?%s", buildGitHubURL(info), baseQueryParameters)
 }
