@@ -8,8 +8,8 @@ CREATE INDEX sub_tag_fk_sub ON "subscription_tag" (subscription_id);
 
 -- +goose Down
 -- +goose StatementBegin
-DROP INDEX IF NOT EXISTS subscription_fk_link;
-DROP INDEX IF NOT EXISTS subscription_fk_chat;
-DROP INDEX IF NOT EXISTS sub_tag_fk_tag;
-DROP INDEX IF NOT EXISTS sub_tag_fk_sub;
+DROP INDEX IF EXISTS subscription_fk_link;
+DROP INDEX IF EXISTS subscription_fk_chat;
+DROP INDEX IF EXISTS sub_tag_fk_tag;
+DROP INDEX IF EXISTS sub_tag_fk_sub;
 -- +goose StatementEnd
