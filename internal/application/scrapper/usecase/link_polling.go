@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
@@ -44,10 +45,11 @@ func NewLinkPollingUseCase(
 	}
 }
 
-func (poller *LinkPollingUseCase) Start(ctx context.Context) error {
+func (poller *LinkPollingUseCase) Start(ctx context.Context, concurrencyBoundary uint) error {
 	_, err := poller.sched.NewJob(
 		gocron.DurationJob(time.Duration(poller.pollerIntervalMinutes)*time.Minute),
 		gocron.NewTask(func() {
+			var wg sync.WaitGroup
 			poller.logger.Info("Start polling job")
 			links, errs := poller.subscriptionRepository.GetAllLinks(ctx)
 			go func() {
@@ -55,29 +57,12 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) error {
 					poller.logger.Error("can't fetch links", "err", err)
 				}
 			}()
-			for link := range links {
-				poller.logger.Info("Fetch link", "url", link.URL)
-				go func(link domain.Link) {
-					subs, err := poller.subscriptionRepository.AllLinkSubscriptions(ctx, link)
-					if err != nil {
-						poller.logger.Warn("can't fetch trackings", "err", err)
-						return
-					}
-					subsChatIDs := make([]int64, 0, len(subs))
-					for _, sub := range subs {
-						subsChatIDs = append(subsChatIDs, sub.ChatID)
-					}
-
-					updates, err := poller.linkState.Fetch(ctx, link)
-					if err != nil {
-						poller.logger.Warn("can't fetch link state", "err", err)
-					}
-					if updates == nil || len(updates) == 0 {
-						return
-					}
-					poller.updateAndNotify(ctx, link, subsChatIDs, updates)
-				}(link)
+			for range concurrencyBoundary {
+				wg.Go(func() {
+					poller.linkWorkerFn(ctx, links)
+				})
 			}
+			wg.Wait()
 		}),
 	)
 	if err != nil {
@@ -85,6 +70,32 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context) error {
 	}
 	poller.sched.Start()
 	return nil
+}
+
+func (poller *LinkPollingUseCase) linkWorkerFn(
+	ctx context.Context, links <-chan domain.Link,
+) {
+	for link := range links {
+		poller.logger.Info("Fetch link", "url", link.URL)
+		subs, err := poller.subscriptionRepository.AllLinkSubscriptions(ctx, link)
+		if err != nil {
+			poller.logger.Warn("can't fetch trackings", "err", err)
+			continue
+		}
+		subsChatIDs := make([]int64, 0, len(subs))
+		for _, sub := range subs {
+			subsChatIDs = append(subsChatIDs, sub.ChatID)
+		}
+
+		updates, err := poller.linkState.Fetch(ctx, link)
+		if err != nil {
+			poller.logger.Warn("can't fetch link state", "err", err)
+		}
+		if updates == nil || len(updates) == 0 {
+			continue
+		}
+		poller.updateAndNotify(ctx, link, subsChatIDs, updates)
+	}
 }
 
 func (poller *LinkPollingUseCase) updateAndNotify(

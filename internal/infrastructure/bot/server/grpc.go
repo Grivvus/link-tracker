@@ -27,9 +27,10 @@ func NewBotGRPCServer(logger *slog.Logger, port ports.BotPort) *BotGRPCServer {
 }
 
 func (s *BotGRPCServer) NotifyAboutUpdate(
-	ctx context.Context, in *pb.LinkUpdate,
+	_ context.Context, in *pb.LinkUpdate,
 ) (*emptypb.Empty, error) {
-	err := s.port.NotifyAboutUpdatedLinks(ctx, model.LinkUpdatedEvent{
+	// passed ctx was already canceled
+	err := s.port.NotifyAboutUpdatedLinks(context.Background(), model.LinkUpdatedEvent{
 		LinkID:      in.Id,
 		RawURL:      in.Url,
 		Description: in.Description,

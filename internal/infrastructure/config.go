@@ -27,6 +27,7 @@ type Config struct {
 	PollerIntervalMinutes int    `envconfig:"POLLER_INTERVAL_MINUTES" default:"30"`
 	DBConnString          string `envconfig:"DB_CONN_STRING" required:"true"`
 	DBAccessType          string `envconfig:"DB_ACCESS_TYPE" default:"SQL"`
+	ConcurrencyBoundary   uint   `envconfig:"CONCURRENCY_BOUNDARY" default:"1"`
 }
 
 func LoadConfig() (Config, error) {
@@ -41,6 +42,12 @@ func LoadConfig() (Config, error) {
 	}
 	if cfg.DBAccessType != "SQL" && cfg.DBAccessType != "ORM" && cfg.DBAccessType != "MEM" {
 		return cfg, fmt.Errorf("%w: invalid DB_ACCESS_TYPE, expect SQL or ORM", err)
+	}
+	if cfg.ConcurrencyBoundary == 0 {
+		return cfg, fmt.Errorf(
+			"%w: invalid CONCURRENCY_BOUNDARY, minimum value is 1",
+			ErrInvalidEnv,
+		)
 	}
 	return cfg, nil
 }

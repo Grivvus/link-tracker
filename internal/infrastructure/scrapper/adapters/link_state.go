@@ -49,11 +49,42 @@ func (a *LinkStateAdapter) fetchGH(ctx context.Context, link domain.Link) ([]mod
 	if err != nil {
 		return nil, err
 	}
-	return []model.LinkState{{
-		UpdateInfo: "abcd",
-		UpdatedAt:  ghDTO.UpdatedAt,
-		Title:      ghDTO.Name,
-	}}, nil
+	if !ghDTO.UpdatedAt.After(link.LastUpdate) {
+		return []model.LinkState{}, nil
+	}
+	updates := make([]model.LinkState, 0)
+	prs, err := a.ghClient.FetchPRs(ctx, *ghinfo)
+	if err != nil {
+		return nil, fmt.Errorf("%w: fetching PRs: %v", ports.ErrBadResponse, err)
+	}
+	for _, pr := range prs {
+		if !pr.CreatedAt.After(link.LastUpdate) {
+			break
+		}
+		if pr.Body == nil {
+			pr.Body = new(string)
+		}
+		updates = append(updates, model.LinkState{
+			UpdateInfo: "New PR: " + reduceBody(*pr.Body),
+			UpdatedAt:  pr.CreatedAt,
+			Title:      pr.Title,
+		})
+	}
+	newIssues, err := a.ghClient.FetchNewIssues(ctx, *ghinfo, link.LastUpdate)
+	if err != nil {
+		return nil, fmt.Errorf("%w: fetching issues: %v", ports.ErrBadResponse, err)
+	}
+	for _, issue := range newIssues {
+		if issue.Body == nil {
+			issue.Body = new(string)
+		}
+		updates = append(updates, model.LinkState{
+			Title:      issue.Title,
+			UpdatedAt:  issue.CreatedAt,
+			UpdateInfo: "New Issue: " + reduceBody(*issue.Body),
+		})
+	}
+	return updates, nil
 }
 
 func (a *LinkStateAdapter) fetchStackoverflow(

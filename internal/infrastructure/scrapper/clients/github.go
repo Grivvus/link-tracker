@@ -62,6 +62,7 @@ func (g *GitHubClient) FetchNewIssues(
 func (g *GitHubClient) FetchPRs(
 	ctx context.Context, info domain.GitHubURLInfo,
 ) ([]dto.PullRequest, error) {
+	// 30 latest PR's
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet,
 		buildGitHubURLQueryPRs(info), nil,
@@ -92,5 +93,5 @@ func buildGitHubURLQueryNewIssues(
 }
 
 func buildGitHubURLQueryPRs(info domain.GitHubURLInfo) string {
-	return fmt.Sprintf(":%s/pulls?%s", buildGitHubURL(info), baseQueryParameters)
+	return fmt.Sprintf("%s/pulls?%s", buildGitHubURL(info), baseQueryParameters)
 }

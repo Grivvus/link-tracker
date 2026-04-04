@@ -117,7 +117,7 @@ func main() {
 		logger, sched, linkStatePort, botPort,
 		subscriptionRepo, chatRepo, int64(cfg.PollerIntervalMinutes),
 	)
-	err = poller.Start(ctx)
+	err = poller.Start(ctx, cfg.ConcurrencyBoundary)
 	if err != nil {
 		logger.Error("can't start polling service", "err", err)
 		exitCode = 1
