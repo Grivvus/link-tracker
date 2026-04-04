@@ -127,3 +127,20 @@ func TestStackoverflowClient_FetchQuestion_InvalidJSON(t *testing.T) {
 	)
 	require.ErrorIs(t, err, ports.ErrBadResponse)
 }
+
+func TestStackoverflowClient_FetchQuestion_Non2XXResponse(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger())
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return newHTTPResponse(http.StatusInternalServerError, `{"message":"server is down}"`), nil
+		}),
+	}
+
+	_, err := client.FetchQuestion(
+		context.TODO(),
+		domain.StackoverflowURLInfo{
+			QuestionID: 123,
+		},
+	)
+	require.ErrorIs(t, err, ports.ErrBadResponse)
+}
