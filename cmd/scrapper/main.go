@@ -20,6 +20,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/orm"
@@ -105,7 +106,11 @@ func main() {
 
 	pb.RegisterScrapperServer(grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
-	linkStatePort := adapters.NewLinkStateAdapter(logger)
+	linkStatePort := adapters.NewLinkStateAdapter(
+		logger,
+		clients.NewGitHubClient(logger),
+		clients.NewStackoverflowClient(logger),
+	)
 
 	sched, err := gocron.NewScheduler()
 	if err != nil {

@@ -33,6 +33,7 @@ type LinkUpdatedEvent struct {
 type LinkState struct {
 	UpdateInfo string
 	UpdatedAt  time.Time
+	UpdatedBy  string
 	Title      string
 }
 

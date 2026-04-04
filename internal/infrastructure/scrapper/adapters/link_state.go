@@ -10,20 +10,34 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
 )
+
+type GitHubClient interface {
+	FetchRepo(context.Context, domain.GitHubURLInfo) (dto.GithubRepository, error)
+	FetchNewIssues(context.Context, domain.GitHubURLInfo, time.Time) ([]dto.Issue, error)
+	FetchPRs(context.Context, domain.GitHubURLInfo) ([]dto.PullRequest, error)
+}
+
+type StackoverflowClient interface {
+	FetchQuestion(context.Context, domain.StackoverflowURLInfo) (dto.StackoverflowQuestion, error)
+	FetchQuestionAnswers(context.Context, int64) ([]dto.StackoverflowAnswer, error)
+	FetchQuestionComments(context.Context, int64) ([]dto.StackoverflowComment, error)
+}
 
 type LinkStateAdapter struct {
 	logger              *slog.Logger
-	ghClient            *clients.GitHubClient
-	stackoverflowClient *clients.StackoverflowClient
+	ghClient            GitHubClient
+	stackoverflowClient StackoverflowClient
 }
 
-func NewLinkStateAdapter(logger *slog.Logger) ports.LinkStatePort {
+func NewLinkStateAdapter(
+	logger *slog.Logger, ghClient GitHubClient,
+	stackoverflowClient StackoverflowClient,
+) ports.LinkStatePort {
 	return &LinkStateAdapter{
 		logger:              logger,
-		ghClient:            clients.NewGitHubClient(logger),
-		stackoverflowClient: clients.NewStackoverflowClient(logger),
+		ghClient:            ghClient,
+		stackoverflowClient: stackoverflowClient,
 	}
 }
 
@@ -64,11 +78,18 @@ func (a *LinkStateAdapter) fetchGH(ctx context.Context, link domain.Link) ([]mod
 		if pr.Body == nil {
 			pr.Body = new(string)
 		}
-		updates = append(updates, model.LinkState{
-			UpdateInfo: "New PR: " + reduceBody(*pr.Body),
+
+		prNewUpdate := model.LinkState{
+			UpdateInfo: reduceBody("New PR: " + *pr.Body),
 			UpdatedAt:  pr.CreatedAt,
 			Title:      pr.Title,
-		})
+		}
+		if pr.CreatedBy == nil {
+			prNewUpdate.UpdatedBy = "Unknown"
+		} else {
+			prNewUpdate.UpdatedBy = pr.CreatedBy.Login
+		}
+		updates = append(updates, prNewUpdate)
 	}
 	newIssues, err := a.ghClient.FetchNewIssues(ctx, *ghinfo, link.LastUpdate)
 	if err != nil {
@@ -78,11 +99,17 @@ func (a *LinkStateAdapter) fetchGH(ctx context.Context, link domain.Link) ([]mod
 		if issue.Body == nil {
 			issue.Body = new(string)
 		}
-		updates = append(updates, model.LinkState{
+		issueNewUpdate := model.LinkState{
 			Title:      issue.Title,
 			UpdatedAt:  issue.CreatedAt,
-			UpdateInfo: "New Issue: " + reduceBody(*issue.Body),
-		})
+			UpdateInfo: reduceBody("New Issue: " + *issue.Body),
+		}
+		if issue.CreatedBy == nil {
+			issueNewUpdate.UpdatedBy = "Unknown"
+		} else {
+			issueNewUpdate.UpdatedBy = issue.CreatedBy.Login
+		}
+		updates = append(updates, issueNewUpdate)
 	}
 	return updates, nil
 }
@@ -101,7 +128,7 @@ func (a *LinkStateAdapter) fetchStackoverflow(
 	if err != nil {
 		return nil, err
 	}
-	lastActivityDate := time.Unix(stoverflowDTO.LastActivityDate, 0)
+	lastActivityDate := time.UnixMilli(stoverflowDTO.LastActivityDate)
 	if !lastActivityDate.After(link.LastUpdate) {
 		// no update since last check
 		// zero value for UpdatedAt is fine
@@ -132,6 +159,7 @@ func (a *LinkStateAdapter) fetchStackoverflow(
 			UpdateInfo: comment.CommentPreview,
 			UpdatedAt:  comment.CreatedAt,
 			Title:      comment.QuestionName,
+			UpdatedBy:  comment.LeftByUser,
 		})
 	}
 	for _, answer := range newAnswers {
@@ -139,6 +167,7 @@ func (a *LinkStateAdapter) fetchStackoverflow(
 			UpdateInfo: answer.AnswerPreview,
 			UpdatedAt:  answer.CreatedAt,
 			Title:      answer.QuestionName,
+			UpdatedBy:  answer.LeftByUser,
 		})
 	}
 	return updates, nil
@@ -154,7 +183,7 @@ func (a *LinkStateAdapter) newCommentsSince(
 	}
 	newComments := make([]model.StackoverflowNewComment, 0)
 	for _, comment := range comments {
-		createdAt := time.Unix(comment.CreationDate, 0)
+		createdAt := time.UnixMilli(comment.CreationDate)
 		if !createdAt.After(since) {
 			break
 		}
@@ -178,7 +207,7 @@ func (a *LinkStateAdapter) newAnswersSince(
 	}
 	newAnswers := make([]model.StackoverflowNewAnswer, 0)
 	for _, answer := range answers {
-		createdAt := time.Unix(answer.CreationDate, 0)
+		createdAt := time.UnixMilli(answer.CreationDate)
 		if !createdAt.After(since) {
 			break
 		}
