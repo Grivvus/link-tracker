@@ -24,10 +24,13 @@ type TrackedLinkView struct {
 }
 
 type LinkUpdatedEvent struct {
-	LinkID      int64
-	RawURL      string
-	Description string
-	ChatIDs     []int64
+	LinkID       int64
+	RawURL       string
+	UpdatedAt    time.Time
+	UpdateName   string
+	UpdateAuthor string
+	Description  string
+	ChatIDs      []int64
 }
 
 type LinkState struct {

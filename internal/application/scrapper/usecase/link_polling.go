@@ -82,9 +82,9 @@ func (poller *LinkPollingUseCase) linkWorkerFn(
 			poller.logger.Warn("can't fetch trackings", "err", err)
 			continue
 		}
-		subsChatIDs := make([]int64, 0, len(subs))
-		for _, sub := range subs {
-			subsChatIDs = append(subsChatIDs, sub.ChatID)
+		subsChatIDs := make([]int64, len(subs))
+		for i, sub := range subs {
+			subsChatIDs[i] = sub.ChatID
 		}
 
 		updates, err := poller.linkState.Fetch(ctx, link)
@@ -120,10 +120,13 @@ func (poller *LinkPollingUseCase) updateAndNotify(
 	for _, update := range updates {
 		errN := poller.botPort.NotifyAboutUpdatedLinks(
 			ctx, model.LinkUpdatedEvent{
-				ChatIDs:     subsChatIDs,
-				LinkID:      link.ID,
-				RawURL:      link.URL.String(),
-				Description: update.UpdateInfo,
+				ChatIDs:      subsChatIDs,
+				UpdatedAt:    update.UpdatedAt,
+				UpdateAuthor: update.UpdatedBy,
+				UpdateName:   update.Title,
+				LinkID:       link.ID,
+				RawURL:       link.URL.String(),
+				Description:  update.UpdateInfo,
 			},
 		)
 		if errN != nil {

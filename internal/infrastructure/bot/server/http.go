@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -32,12 +33,19 @@ func (serv *BotServer) PostUpdates(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "can't decode body", http.StatusBadRequest)
 		return
 	}
+	updatedAt, err := time.Parse(time.RFC3339, updates.UpdatedAt)
+	if err != nil {
+		http.Error(w, "can't parse updatedAt field", http.StatusBadRequest)
+	}
 	// if we're pass request context, it will be canceled before bot send the message
 	err = serv.port.NotifyAboutUpdatedLinks(context.Background(), model.LinkUpdatedEvent{
-		LinkID:      updates.Id,
-		ChatIDs:     updates.TgChatIds,
-		RawURL:      updates.Url,
-		Description: updates.Description,
+		LinkID:       updates.Id,
+		ChatIDs:      updates.TgChatIds,
+		RawURL:       updates.Url,
+		Description:  updates.Description,
+		UpdateAuthor: updates.UpdateAuthor,
+		UpdatedAt:    updatedAt,
+		UpdateName:   updates.Title,
 	})
 	if err != nil {
 		if errors.Is(err, ports.ErrBadParams) {

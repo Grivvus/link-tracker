@@ -13,6 +13,9 @@ service Bot {
 message LinkUpdate {
   int64 id = 1;
   string url = 2;
+  string update_author = 5;
+  string title = 6;
+  string updated_at = 7;
   string description = 3;
   repeated int64 tgChatIds = 4;
 }

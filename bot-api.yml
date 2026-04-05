@@ -43,6 +43,9 @@ components:
         - url
         - description
         - tgChatIds
+        - updateAuthor
+        - updatedAt
+        - title
       properties:
         id:
           type: integer
@@ -50,6 +53,12 @@ components:
         url:
           type: string
           format: uri
+        updateAuthor:
+          type: string
+        updatedAt:
+          type: string
+        title:
+          type: string
         description:
           type: string
         tgChatIds:

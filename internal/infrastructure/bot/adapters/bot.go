@@ -46,7 +46,15 @@ func (b *BotAdapter) NotifyAboutUpdatedLinks(
 func formNotificationMessage(updateInfo model.LinkUpdatedEvent) string {
 	const baseMsg = "One of the links you're following has been updated, check out what's new."
 	return fmt.Sprintf(
-		"%s\r\nurl: %s\r\nshort description: %s",
-		baseMsg, updateInfo.RawURL, updateInfo.Description,
+		`
+%s
+url: %s
+updated at: %v
+title: %s
+update author: %s
+short description: %s
+`,
+		baseMsg, updateInfo.RawURL, updateInfo.UpdatedAt,
+		updateInfo.UpdateName, updateInfo.UpdateAuthor, updateInfo.Description,
 	)
 }

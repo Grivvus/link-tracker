@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -29,12 +30,19 @@ func NewBotGRPCServer(logger *slog.Logger, port ports.BotPort) *BotGRPCServer {
 func (s *BotGRPCServer) NotifyAboutUpdate(
 	_ context.Context, in *pb.LinkUpdate,
 ) (*emptypb.Empty, error) {
+	updatedAt, err := time.Parse(time.RFC3339, in.UpdatedAt)
+	if err != nil {
+		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "can't parse updatedAt field")
+	}
 	// passed ctx was already canceled
-	err := s.port.NotifyAboutUpdatedLinks(context.Background(), model.LinkUpdatedEvent{
-		LinkID:      in.Id,
-		RawURL:      in.Url,
-		Description: in.Description,
-		ChatIDs:     in.TgChatIds,
+	err = s.port.NotifyAboutUpdatedLinks(context.Background(), model.LinkUpdatedEvent{
+		LinkID:       in.Id,
+		RawURL:       in.Url,
+		UpdateAuthor: in.UpdateAuthor,
+		UpdatedAt:    updatedAt,
+		UpdateName:   in.Title,
+		Description:  in.Description,
+		ChatIDs:      in.TgChatIds,
 	})
 	if err != nil {
 		s.logger.Error("can't send notifications", "err", err)

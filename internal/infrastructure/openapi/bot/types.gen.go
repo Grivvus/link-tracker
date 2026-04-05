@@ -11,10 +11,13 @@ type ApiErrorResponse struct {
 
 // LinkUpdate defines model for LinkUpdate.
 type LinkUpdate struct {
-	Description string  `json:"description"`
-	Id          int64   `json:"id"`
-	TgChatIds   []int64 `json:"tgChatIds"`
-	Url         string  `json:"url"`
+	Description  string  `json:"description"`
+	Id           int64   `json:"id"`
+	TgChatIds    []int64 `json:"tgChatIds"`
+	Title        string  `json:"title"`
+	UpdateAuthor string  `json:"updateAuthor"`
+	UpdatedAt    string  `json:"updatedAt"`
+	Url          string  `json:"url"`
 }
 
 // PostUpdatesJSONRequestBody defines body for PostUpdates for application/json ContentType.
