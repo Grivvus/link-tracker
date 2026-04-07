@@ -162,7 +162,7 @@ func newRepositories(
 			return nil, nil, err
 		}
 		chat := sql.NewChatRepository(pool)
-		sub := sql.NewSubscriptionRepository(pool)
+		sub := sql.NewSubscriptionRepository(pool, cfg.DBLinksPageSize)
 		return chat, sub, nil
 	case "ORM":
 		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
@@ -174,7 +174,7 @@ func newRepositories(
 			return nil, nil, err
 		}
 		chat := orm.NewChatRepository(pool)
-		sub := orm.NewSubscriptionRepository(pool)
+		sub := orm.NewSubscriptionRepository(pool, cfg.DBLinksPageSize)
 		return chat, sub, nil
 	case "MEM":
 		st := storage.New()

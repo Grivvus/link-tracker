@@ -15,16 +15,16 @@ import (
 )
 
 type SubscriptionRepositorySQL struct {
-	queries *gen.Queries
-	pool    *pgxpool.Pool
+	queries  *gen.Queries
+	pool     *pgxpool.Pool
+	pageSize int
 }
 
-const pageSize = 10
-
-func NewSubscriptionRepository(pool *pgxpool.Pool) repository.SubscriptionRepository {
+func NewSubscriptionRepository(pool *pgxpool.Pool, pageSize int) repository.SubscriptionRepository {
 	return &SubscriptionRepositorySQL{
-		queries: gen.New(pool),
-		pool:    pool,
+		queries:  gen.New(pool),
+		pool:     pool,
+		pageSize: pageSize,
 	}
 }
 
@@ -187,7 +187,7 @@ func (repo *SubscriptionRepositorySQL) GetAllLinks(
 		lastLinkID := int64(0)
 		for {
 			links, err := repo.queries.GetAllLinksPaginate(ctx, gen.GetAllLinksPaginateParams{
-				Limit: pageSize,
+				Limit: int32(repo.pageSize),
 				ID:    lastLinkID,
 			})
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -205,7 +205,7 @@ func (repo *SubscriptionRepositorySQL) GetAllLinks(
 				ch <- domLink
 				lastLinkID = link.ID
 			}
-			if len(links) < pageSize {
+			if len(links) < repo.pageSize {
 				return
 			}
 		}

@@ -28,6 +28,7 @@ type Config struct {
 	DBConnString          string `envconfig:"DB_CONN_STRING" required:"true"`
 	DBAccessType          string `envconfig:"DB_ACCESS_TYPE" default:"SQL"`
 	ConcurrencyBoundary   uint   `envconfig:"CONCURRENCY_BOUNDARY" default:"1"`
+	DBLinksPageSize       int    `envconfig:"DB_LINKS_PAGE_SIZE" default:"50"`
 }
 
 func LoadConfig() (Config, error) {
@@ -47,6 +48,11 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf(
 			"%w: invalid CONCURRENCY_BOUNDARY, minimum value is 1",
 			ErrInvalidEnv,
+		)
+	}
+	if cfg.DBLinksPageSize <= 0 {
+		return cfg, fmt.Errorf(
+			"%w: invalid DB_LINKS_PAGE_SIZE, should be positive", ErrInvalidEnv,
 		)
 	}
 	return cfg, nil

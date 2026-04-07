@@ -148,7 +148,7 @@ func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_GetAllLinksPagin
 func (s *RepositoryIntegrationSuite) newORMPair() repoPair {
 	return repoPair{
 		chat: ormrepo.NewChatRepository(s.pool),
-		sub:  ormrepo.NewSubscriptionRepository(s.pool),
+		sub:  ormrepo.NewSubscriptionRepository(s.pool, 10),
 	}
 }
 

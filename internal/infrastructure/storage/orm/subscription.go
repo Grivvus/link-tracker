@@ -14,15 +14,15 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
-const pageSize = 10
-
 type SubscriptionRepositoryORM struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	pageSize int
 }
 
-func NewSubscriptionRepository(pool *pgxpool.Pool) repository.SubscriptionRepository {
+func NewSubscriptionRepository(pool *pgxpool.Pool, pageSize int) repository.SubscriptionRepository {
 	return &SubscriptionRepositoryORM{
-		pool: pool,
+		pool:     pool,
+		pageSize: pageSize,
 	}
 }
 
@@ -179,7 +179,7 @@ func (repo *SubscriptionRepositoryORM) GetAllLinks(
 				Select("id", "url", "last_update").
 				From("link").
 				Where(goqu.Ex{"id": goqu.Op{"gt": lastLinkID}}).
-				Limit(pageSize).
+				Limit(uint(repo.pageSize)).
 				Order(goqu.C("id").Asc()).
 				Prepared(true)
 
@@ -197,7 +197,7 @@ func (repo *SubscriptionRepositoryORM) GetAllLinks(
 				ch <- domLink
 				lastLinkID = dbLink.ID
 			}
-			if len(dbLinks) < pageSize {
+			if len(dbLinks) < repo.pageSize {
 				return
 			}
 		}
