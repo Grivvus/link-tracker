@@ -56,7 +56,7 @@ func (a *LinkStateAdapter) fetchGH(ctx context.Context, link domain.Link) ([]mod
 	isGH, ghinfo := link.GitHubURLInfo()
 	if !isGH {
 		return nil, fmt.Errorf(
-			"%w: exected valid GitHubURLInfo", ports.ErrBadParams,
+			"%w: expected valid GitHubURLInfo", ports.ErrBadParams,
 		)
 	}
 	ghDTO, err := a.ghClient.FetchRepo(ctx, *ghinfo)

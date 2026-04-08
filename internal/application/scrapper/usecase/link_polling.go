@@ -90,6 +90,12 @@ func (poller *LinkPollingUseCase) linkWorkerFn(
 		updates, err := poller.linkState.Fetch(ctx, link)
 		if err != nil {
 			poller.logger.Warn("can't fetch link state", "err", err)
+			poller.updateAndNotify(ctx, link, subsChatIDs, []model.LinkState{{
+				UpdatedBy:  "-",
+				UpdatedAt:  time.Now(),
+				Title:      "Could not fetch link state",
+				UpdateInfo: "Cause: " + err.Error(),
+			}})
 		}
 		if updates == nil || len(updates) == 0 {
 			continue
