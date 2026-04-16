@@ -10,9 +10,11 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/segmentio/kafka-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/adapters"
+	notifications "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/kafka"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/server"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	scrapperpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
@@ -101,6 +103,33 @@ func main() {
 	}
 
 	pb.RegisterBotServer(grpcServ, server.NewBotGRPCServer(logger, bp))
+
+	if cfg.NotificationMethod == "kafka" {
+		dlqWriter := &kafka.Writer{
+			Addr:        kafka.TCP(cfg.KafkaDLQTopic),
+			Topic:       cfg.KafkaDLQTopic,
+			Balancer:    &kafka.LeastBytes{},
+			Logger:      kafka.LoggerFunc(logger.Info),
+			ErrorLogger: kafka.LoggerFunc(logger.Error),
+		}
+		brokers, err := cfg.KafkaBrokers()
+		if err != nil {
+			logger.Error("invalid kafka brokers", "err", err)
+			exitCode = 1
+			return
+		}
+		notificationsReader := kafka.NewReader(kafka.ReaderConfig{
+			Topic:       cfg.KafkaTopic,
+			Brokers:     brokers,
+			Logger:      kafka.LoggerFunc(logger.Info),
+			ErrorLogger: kafka.LoggerFunc(logger.Error),
+		})
+		defer func() { _ = dlqWriter.Close() }()
+		reader := notifications.NewEventsReader(
+			logger, bp, notificationsReader, dlqWriter, cfg.KafkaMaxAttempts,
+		)
+		reader.Start(ctx)
+	}
 
 	go func() {
 		logger.Info("server has been started on", "addr", s.Addr)

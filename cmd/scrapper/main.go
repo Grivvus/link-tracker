@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/segmentio/kafka-go"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/usecase"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -87,7 +89,26 @@ func main() {
 		exitCode = 1
 		return
 	}
-	botPort := adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
+	var botPort ports.BotPort
+	if cfg.NotificationMethod == "kafka" {
+		brokers, err := cfg.KafkaBrokers()
+		if err != nil {
+			logger.Error("can't get kafka brokers", "err", err)
+			exitCode = 1
+			return
+		}
+		kw := &kafka.Writer{
+			Addr:         kafka.TCP(brokers...),
+			Topic:        cfg.KafkaTopic,
+			Balancer:     &kafka.LeastBytes{},
+			RequiredAcks: kafka.RequireOne,
+			Logger:       kafka.LoggerFunc(logger.Info),
+			ErrorLogger:  kafka.LoggerFunc(logger.Error),
+		}
+		botPort = adapters.NewBotKafkaAdapter(logger, kw)
+	} else {
+		botPort = adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
+	}
 
 	chatRepo, subscriptionRepo, err := newRepositories(ctx, cfg)
 	if err != nil {

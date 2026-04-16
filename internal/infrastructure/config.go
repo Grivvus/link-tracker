@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -29,6 +30,18 @@ type Config struct {
 	DBAccessType          string `envconfig:"DB_ACCESS_TYPE" default:"SQL"`
 	ConcurrencyBoundary   uint   `envconfig:"CONCURRENCY_BOUNDARY" default:"1"`
 	DBLinksPageSize       int    `envconfig:"DB_LINKS_PAGE_SIZE" default:"50"`
+	NotificationMethod    string `envconfig:"NOTIFICATION_METHOD" default:"kafka"`
+	KafkaBrokersRaw       string `envconfig:"KAFKA_BROKERS"`
+	KafkaTopic            string `envconfig:"KAFKA_TOPIC"`
+	KafkaDLQTopic         string `envconfig:"KAFKA_DLQ_TOPIC"`
+	KafkaMaxAttempts      int    `json:"KAFKA_MAX_ATTEMPTS" default:"5"`
+}
+
+func (c *Config) KafkaBrokers() ([]string, error) {
+	if c.NotificationMethod != "kafka" {
+		return nil, fmt.Errorf("%w: the http method is selected", ErrInvalidEnv)
+	}
+	return strings.Split(c.KafkaBrokersRaw, ","), nil
 }
 
 func LoadConfig() (Config, error) {
@@ -54,6 +67,22 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf(
 			"%w: invalid DB_LINKS_PAGE_SIZE, should be positive", ErrInvalidEnv,
 		)
+	}
+
+	if cfg.NotificationMethod != "kafka" && cfg.NotificationMethod != "http" {
+		return cfg, fmt.Errorf(
+			"%w: invalid notification method, expected kafka or http",
+			ErrInvalidEnv,
+		)
+	}
+
+	if cfg.NotificationMethod == "kafka" {
+		if cfg.KafkaBrokersRaw == "" && cfg.KafkaTopic == "" && cfg.KafkaDLQTopic == "" {
+			return cfg, fmt.Errorf(
+				"%w: KAFKA_BROKERS, KAFKTA_TOPIC and KAFKA_DLQ_TOPIC must be set",
+				ErrInvalidEnv,
+			)
+		}
 	}
 	return cfg, nil
 }
