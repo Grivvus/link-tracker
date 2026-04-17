@@ -25,10 +25,10 @@ $(addprefix build_,$(MODULES)):
 	mkdir -p bin; \
 	go build -o ./bin/$$modulename ./cmd/$$modulename
 
-## test: run all tests
-.PHONY: test
-test:
-	@go test -coverpkg='gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/...' --race -count=1 -coverprofile='$(COVERAGE_FILE)' ./...
+## test: run all unit tests
+.PHONY: test-unit
+test-unit:
+	@go test -coverpkg='gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/...' --race -count=1 -coverprofile='$(COVERAGE_FILE)' ./internal/...
 	@go tool cover -func='$(COVERAGE_FILE)' | grep ^total | tr -s '\t'
 
 .PHONY: lint
