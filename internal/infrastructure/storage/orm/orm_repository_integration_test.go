@@ -1,4 +1,4 @@
-package sql_test
+package orm_test
 
 import (
 	"context"
@@ -18,15 +18,17 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	memstorage "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
-	sqlrepo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql"
+	ormrepo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/orm"
 )
 
 type repoPair struct {
 	chat repository.ChatRepository
 	sub  repository.SubscriptionRepository
+	out  repository.NotificationOutboxRepository
 }
 
 type chatLifecycleResult struct {
@@ -57,7 +59,19 @@ type subscriptionSnapshot struct {
 	Tags   []string
 }
 
-type RepositoryIntegrationSuite struct {
+type outboxScenarioResult struct {
+	ZeroLimit          []model.OutboxLinkUpdateEvent
+	InitialPending     []model.OutboxLinkUpdateEvent
+	PendingFirstPage   []model.OutboxLinkUpdateEvent
+	PendingAfterCursor []model.OutboxLinkUpdateEvent
+	PendingAfterSent   []model.OutboxLinkUpdateEvent
+	PendingAfterFailed []model.OutboxLinkUpdateEvent
+	MissingMarkSent    string
+	MissingMarkFailed  string
+	LinkLastUpdate     time.Time
+}
+
+type ORMRepositoryIntegrationSuite struct {
 	suite.Suite
 	ctx       context.Context
 	container testcontainers.Container
@@ -65,10 +79,10 @@ type RepositoryIntegrationSuite struct {
 }
 
 func TestRepositoryIntegrationSuite(t *testing.T) {
-	suite.Run(t, new(RepositoryIntegrationSuite))
+	suite.Run(t, new(ORMRepositoryIntegrationSuite))
 }
 
-func (s *RepositoryIntegrationSuite) SetupSuite() {
+func (s *ORMRepositoryIntegrationSuite) SetupSuite() {
 	s.ctx = context.Background()
 	container, pool, err := startPostgresContainer(s.ctx)
 	if err != nil {
@@ -80,7 +94,7 @@ func (s *RepositoryIntegrationSuite) SetupSuite() {
 	s.Require().NoError(applyMigrations(s.ctx, s.pool))
 }
 
-func (s *RepositoryIntegrationSuite) TearDownSuite() {
+func (s *ORMRepositoryIntegrationSuite) TearDownSuite() {
 	if s.pool != nil {
 		s.pool.Close()
 	}
@@ -89,39 +103,45 @@ func (s *RepositoryIntegrationSuite) TearDownSuite() {
 	}
 }
 
-func (s *RepositoryIntegrationSuite) SetupTest() {
+func (s *ORMRepositoryIntegrationSuite) SetupTest() {
 	if s.pool == nil {
 		s.T().Skip("postgres is not available")
 	}
 	_, err := s.pool.Exec(
 		s.ctx,
-		`TRUNCATE TABLE "subscription_tag", "subscription", "tag", "link", "chat" RESTART IDENTITY CASCADE;`,
+		`TRUNCATE TABLE "notification_event", "subscription_tag", "subscription", "tag", "link", "chat" RESTART IDENTITY CASCADE;`,
 	)
 	s.Require().NoError(err)
 }
 
-func (s *RepositoryIntegrationSuite) TestChatRepository_MatchesInMemoryBehavior() {
+func (s *ORMRepositoryIntegrationSuite) TestChatRepository_MatchesInMemoryBehavior() {
 	expected := runChatLifecycleScenario(s.T(), newInMemoryPair())
-	actual := runChatLifecycleScenario(s.T(), s.newSQLPair())
+	actual := runChatLifecycleScenario(s.T(), s.newORMPair())
 	s.Equal(expected, actual)
 }
 
-func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_MatchesInMemoryBehavior() {
+func (s *ORMRepositoryIntegrationSuite) TestSubscriptionRepository_MatchesInMemoryBehavior() {
 	expected := runSubscriptionScenario(s.T(), newInMemoryPair())
-	actual := runSubscriptionScenario(s.T(), s.newSQLPair())
+	actual := runSubscriptionScenario(s.T(), s.newORMPair())
 	s.Equal(expected, actual)
 }
 
-func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_GetAllLinksPagination() {
+func (s *ORMRepositoryIntegrationSuite) TestNotificationOutboxRepository_MatchesInMemoryBehavior() {
+	expected := runOutboxScenario(s.T(), newInMemoryPair())
+	actual := runOutboxScenario(s.T(), s.newORMPair())
+	assertOutboxScenarioEqual(s.T(), expected, actual)
+}
+
+func (s *ORMRepositoryIntegrationSuite) TestSubscriptionRepository_GetAllLinksPagination() {
 	if s.pool == nil {
 		s.T().Skip("postgres is not available")
 	}
 
-	repos := s.newSQLPair()
+	repos := s.newORMPair()
 	ctx := context.Background()
 	const (
 		chatID    int64 = 301
-		linkCount       = 25
+		linkCount       = 60
 	)
 
 	require.NoError(s.T(), repos.chat.Register(ctx, chatID))
@@ -145,11 +165,47 @@ func (s *RepositoryIntegrationSuite) TestSubscriptionRepository_GetAllLinksPagin
 	require.Equal(s.T(), expectedURLs, actualURLs)
 }
 
-func (s *RepositoryIntegrationSuite) newSQLPair() repoPair {
+func (s *ORMRepositoryIntegrationSuite) newORMPair() repoPair {
 	return repoPair{
-		chat: sqlrepo.NewChatRepository(s.pool),
-		sub:  sqlrepo.NewSubscriptionRepository(s.pool, 10),
+		chat: ormrepo.NewChatRepository(s.pool),
+		sub:  ormrepo.NewSubscriptionRepository(s.pool, 10),
+		out:  ormrepo.NewNotificationOutboxRepository(s.pool),
 	}
+}
+
+func (s *ORMRepositoryIntegrationSuite) TestSubscriptionRepository_EmptyTagsArePreserved() {
+	if s.pool == nil {
+		s.T().Skip("postgres is not available")
+	}
+
+	repos := s.newORMPair()
+	ctx := context.Background()
+	const chatID int64 = 401
+
+	require.NoError(s.T(), repos.chat.Register(ctx, chatID))
+
+	link := mustNewLink(s.T(), "https://github.com/acme/project-no-tags")
+	_, err := repos.sub.Subscribe(ctx, link, chatID, []string{})
+	require.NoError(s.T(), err)
+
+	chatSubs, err := repos.sub.AllChatSubscriptions(ctx, chatID)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), chatSubs, 1)
+
+	sub := chatSubs[0]
+	require.NotZero(s.T(), sub.ID)
+	require.NotZero(s.T(), sub.LinkID)
+	require.Equal(s.T(), chatID, sub.ChatID)
+	require.Empty(s.T(), sub.Tags)
+
+	gotLink, err := repos.sub.GetLink(ctx, sub.LinkID)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), link.URL.String(), gotLink.URL.String())
+
+	linkSubs, err := repos.sub.AllLinkSubscriptions(ctx, link)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), linkSubs, 1)
+	require.Empty(s.T(), linkSubs[0].Tags)
 }
 
 func newInMemoryPair() repoPair {
@@ -157,6 +213,7 @@ func newInMemoryPair() repoPair {
 	return repoPair{
 		chat: st,
 		sub:  st,
+		out:  st,
 	}
 }
 
@@ -227,12 +284,6 @@ func runSubscriptionScenario(t *testing.T, repos repoPair) subscriptionScenarioR
 	result.LinkSubscriptions = snapshotsFromSubscriptions(t, repos.sub, linkSubs)
 
 	allLinks, _ := repos.sub.GetAllLinks(ctx)
-	// // will block forever
-	//errs := make([]error, 0)
-	//for err := range errCh {
-	//	errs = append(errs, err)
-	//}
-	//require.Empty(t, errs)
 	result.AllLinks = linkURLs(allLinks)
 
 	foundLink, err := repos.sub.FindLinkByURL(ctx, linkA.URL)
@@ -259,6 +310,149 @@ func runSubscriptionScenario(t *testing.T, repos repoPair) subscriptionScenarioR
 	result.LinkSubscriptionsEnd = snapshotsFromSubscriptions(t, repos.sub, linkSubs)
 
 	return result
+}
+
+func runOutboxScenario(t *testing.T, repos repoPair) outboxScenarioResult {
+	t.Helper()
+
+	ctx := context.Background()
+	const (
+		chatID1 int64 = 501
+		chatID2 int64 = 502
+	)
+
+	require.NoError(t, repos.chat.Register(ctx, chatID1))
+	require.NoError(t, repos.chat.Register(ctx, chatID2))
+
+	link := mustNewLink(t, "https://github.com/acme/project-outbox")
+
+	_, err := repos.sub.Subscribe(ctx, link, chatID1, []string{"alerts"})
+	require.NoError(t, err)
+	_, err = repos.sub.Subscribe(ctx, link, chatID2, []string{"daily"})
+	require.NoError(t, err)
+
+	storedLink, err := repos.sub.FindLinkByURL(ctx, link.URL)
+	require.NoError(t, err)
+
+	ts1 := time.Date(2026, time.January, 10, 12, 0, 0, 0, time.Local)
+	ts2 := ts1.Add(10 * time.Minute)
+	ts3 := ts2.Add(10 * time.Minute)
+	storedLink.LastUpdate = ts3
+
+	_, err = repos.sub.UpdateLink(ctx, storedLink, []model.LinkUpdatedEvent{
+		{
+			LinkID:       storedLink.ID,
+			RawURL:       storedLink.URL.String(),
+			UpdatedAt:    ts1,
+			UpdateName:   "issue-1",
+			UpdateAuthor: "alice",
+			Description:  "first event",
+			ChatIDs:      []int64{chatID1, chatID2},
+		},
+		{
+			LinkID:       storedLink.ID,
+			RawURL:       storedLink.URL.String(),
+			UpdatedAt:    ts2,
+			UpdateName:   "issue-2",
+			UpdateAuthor: "bob",
+			Description:  "second event",
+			ChatIDs:      []int64{chatID1, chatID2},
+		},
+		{
+			LinkID:       storedLink.ID,
+			RawURL:       storedLink.URL.String(),
+			UpdatedAt:    ts3,
+			UpdateName:   "issue-3",
+			UpdateAuthor: "carol",
+			Description:  "third event",
+			ChatIDs:      []int64{chatID1, chatID2},
+		},
+	})
+	require.NoError(t, err)
+
+	result := outboxScenarioResult{}
+
+	result.ZeroLimit, err = repos.out.GetPending(ctx, 0, 0)
+	require.NoError(t, err)
+
+	result.InitialPending, err = repos.out.GetPending(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, result.InitialPending, 3)
+
+	result.PendingFirstPage, err = repos.out.GetPending(ctx, 0, 2)
+	require.NoError(t, err)
+	require.Len(t, result.PendingFirstPage, 2)
+
+	cursor := result.PendingFirstPage[0].ID
+	result.PendingAfterCursor, err = repos.out.GetPending(ctx, cursor, 10)
+	require.NoError(t, err)
+
+	require.NoError(t, repos.out.MarkSent(ctx, []int64{
+		result.InitialPending[0].ID,
+		result.InitialPending[2].ID,
+	}))
+
+	result.PendingAfterSent, err = repos.out.GetPending(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, result.PendingAfterSent, 1)
+
+	require.NoError(t, repos.out.MarkFailed(ctx, result.PendingAfterSent[0].ID, "delivery failed"))
+
+	result.PendingAfterFailed, err = repos.out.GetPending(ctx, 0, 10)
+	require.NoError(t, err)
+
+	result.MissingMarkSent = errorKind(repos.out.MarkSent(ctx, []int64{9999}))
+	result.MissingMarkFailed = errorKind(repos.out.MarkFailed(ctx, 9999, "ignored"))
+
+	updatedLink, err := repos.sub.GetLink(ctx, storedLink.ID)
+	require.NoError(t, err)
+	result.LinkLastUpdate = updatedLink.LastUpdate
+
+	return result
+}
+
+func assertOutboxScenarioEqual(
+	t *testing.T, expected, actual outboxScenarioResult,
+) {
+	t.Helper()
+
+	assertOutboxEventsEqual(t, "zero_limit", expected.ZeroLimit, actual.ZeroLimit)
+	assertOutboxEventsEqual(t, "initial_pending", expected.InitialPending, actual.InitialPending)
+	assertOutboxEventsEqual(t, "pending_first_page", expected.PendingFirstPage, actual.PendingFirstPage)
+	assertOutboxEventsEqual(t, "pending_after_cursor", expected.PendingAfterCursor, actual.PendingAfterCursor)
+	assertOutboxEventsEqual(t, "pending_after_sent", expected.PendingAfterSent, actual.PendingAfterSent)
+	assertOutboxEventsEqual(t, "pending_after_failed", expected.PendingAfterFailed, actual.PendingAfterFailed)
+	require.Equal(t, expected.MissingMarkSent, actual.MissingMarkSent, "missing_mark_sent")
+	require.Equal(t, expected.MissingMarkFailed, actual.MissingMarkFailed, "missing_mark_failed")
+	require.Equal(t, expected.LinkLastUpdate, actual.LinkLastUpdate, "link_last_update")
+}
+
+func assertOutboxEventsEqual(
+	t *testing.T, step string, expected, actual []model.OutboxLinkUpdateEvent,
+) {
+	t.Helper()
+
+	require.Lenf(t, actual, len(expected), "%s: unexpected event count", step)
+	for i, expectedEvent := range expected {
+		actualEvent := actual[i]
+		require.Equalf(t, expectedEvent.ID, actualEvent.ID, "%s[%d].id", step, i)
+		require.Equalf(t, expectedEvent.LinkID, actualEvent.LinkID, "%s[%d].link_id", step, i)
+		assertLinkUpdatedEventEqual(t, fmt.Sprintf("%s[%d].event", step, i), expectedEvent.Event, actualEvent.Event)
+	}
+}
+
+func assertLinkUpdatedEventEqual(
+	t *testing.T, path string, expected, actual model.LinkUpdatedEvent,
+) {
+	t.Helper()
+
+	require.Equal(t, expected.LinkID, actual.LinkID, path+".link_id")
+	require.Equal(t, expected.RawURL, actual.RawURL, path+".raw_url")
+	require.Equal(t, expected.UpdatedAt, actual.UpdatedAt, path+".updated_at")
+	require.Equal(t, expected.UpdateName, actual.UpdateName, path+".update_name")
+	require.Equal(t, expected.UpdateAuthor, actual.UpdateAuthor, path+".update_author")
+	require.Equal(t, expected.Description, actual.Description, path+".description")
+	require.Equal(t, expected.ChatIDs, actual.ChatIDs, path+".chat_ids")
 }
 
 func snapshotsFromSubscriptions(

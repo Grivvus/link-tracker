@@ -24,10 +24,18 @@ func NewNotificationOutboxRepository(pool *pgxpool.Pool) repository.Notification
 func (repo *NotificationOutboxRepository) GetPending(
 	ctx context.Context, startsWith int64, limit int32,
 ) ([]model.OutboxLinkUpdateEvent, error) {
+	if limit <= 0 {
+		return []model.OutboxLinkUpdateEvent{}, nil
+	}
 	notifications, err := queryMany(ctx, repo.pool, dialect.
 		Select("id", "updated_at", "link_id", "formed_notification").
 		From(goqu.T("notification_event")).
-		Where(goqu.Ex{"id": goqu.Op{"gt": startsWith}}).
+		Where(
+			goqu.Ex{"id": goqu.Op{"gt": startsWith}},
+			goqu.C("sent").IsNotTrue(),
+			goqu.C("failed").IsNotTrue(),
+		).
+		Order(goqu.I("id").Asc()).
 		Limit(uint(limit)).
 		Prepared(true), pgx.RowToStructByName[Notification])
 	if err != nil {
