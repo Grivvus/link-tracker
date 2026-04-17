@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -14,19 +15,27 @@ import (
 
 const initialCap = 10
 
+type notificationState struct {
+	event         model.LinkUpdatedEvent
+	sent          bool
+	failed        bool
+	failingReason string
+}
+
 type Storage struct {
 	linkStorage              map[int64]domain.Link
 	subscriptionStorage      map[int64]domain.Subscription
 	linkIDByURL              map[string]int64
 	subscriptionIDByChatID   map[int64]map[int64]int64
 	chatStorage              map[int64]struct{}
-	notificationStorage      map[int64]any
+	notificationStorage      map[int64]notificationState
 	currentMaxLinkID         atomic.Int64
 	currentMaxSubID          atomic.Int64
 	currentMaxNotificationID atomic.Int64
 	rwmuChat                 sync.RWMutex
 	rwmuLink                 sync.RWMutex
 	rwmuSubscription         sync.RWMutex
+	rwmuNotification         sync.RWMutex
 }
 
 func New() *Storage {
@@ -36,7 +45,7 @@ func New() *Storage {
 		linkIDByURL:            make(map[string]int64, initialCap),
 		subscriptionIDByChatID: make(map[int64]map[int64]int64, initialCap),
 		chatStorage:            make(map[int64]struct{}, initialCap),
-		notificationStorage:    make(map[int64]any, initialCap),
+		notificationStorage:    make(map[int64]notificationState, initialCap),
 	}
 }
 
@@ -154,13 +163,23 @@ func (st *Storage) GetLink(_ context.Context, linkID int64) (domain.Link, error)
 func (st *Storage) UpdateLink(
 	_ context.Context, link domain.Link, updates []model.LinkUpdatedEvent,
 ) (domain.Link, error) {
-	_, err := st.saveOrGetLink(link)
+	linkID, err := st.saveOrGetLink(link)
 	if err != nil {
 		return domain.Link{}, err
 	}
+	link.ID = linkID
+
+	st.rwmuLink.Lock()
+	st.linkStorage[linkID] = link
+	st.rwmuLink.Unlock()
+
+	st.rwmuNotification.Lock()
+	defer st.rwmuNotification.Unlock()
 	for _, update := range updates {
-		nextID := st.currentMaxNotificationID.Add(1)
-		st.notificationStorage[nextID] = update
+		nextID := st.getNextNotificationID()
+		st.notificationStorage[nextID] = notificationState{
+			event: cloneLinkUpdatedEvent(update),
+		}
 	}
 	return link, nil
 }
@@ -254,16 +273,69 @@ func (st *Storage) Delete(_ context.Context, chatID int64) error {
 	return nil
 }
 
-func (st *Storage) GetPending(ctx context.Context, startsWith int64, limit int32) ([]model.OutboxLinkUpdateEvent, error) {
-	panic("not implemented")
+func (st *Storage) GetPending(
+	_ context.Context, startsWith int64, limit int32,
+) ([]model.OutboxLinkUpdateEvent, error) {
+	if limit <= 0 {
+		return []model.OutboxLinkUpdateEvent{}, nil
+	}
+
+	st.rwmuNotification.RLock()
+	defer st.rwmuNotification.RUnlock()
+
+	ids := make([]int64, 0, len(st.notificationStorage))
+	for id, notification := range st.notificationStorage {
+		if id <= startsWith || notification.sent || notification.failed {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i] < ids[j]
+	})
+	if len(ids) > int(limit) {
+		ids = ids[:limit]
+	}
+
+	events := make([]model.OutboxLinkUpdateEvent, 0, len(ids))
+	for _, id := range ids {
+		notification := st.notificationStorage[id]
+		events = append(events, model.OutboxLinkUpdateEvent{
+			ID:     id,
+			LinkID: notification.event.LinkID,
+			Event:  cloneLinkUpdatedEvent(notification.event),
+		})
+	}
+	return events, nil
 }
 
-func (st *Storage) MarkSent(ctx context.Context, ids []int64) error {
-	panic("not implemented")
+func (st *Storage) MarkSent(_ context.Context, ids []int64) error {
+	st.rwmuNotification.Lock()
+	defer st.rwmuNotification.Unlock()
+
+	for _, id := range ids {
+		notification, ok := st.notificationStorage[id]
+		if !ok {
+			continue
+		}
+		notification.sent = true
+		st.notificationStorage[id] = notification
+	}
+	return nil
 }
 
-func (st *Storage) MarkFailed(ctx context.Context, id int64, reason string) error {
-	panic("not implemented")
+func (st *Storage) MarkFailed(_ context.Context, id int64, reason string) error {
+	st.rwmuNotification.Lock()
+	defer st.rwmuNotification.Unlock()
+
+	notification, ok := st.notificationStorage[id]
+	if !ok {
+		return nil
+	}
+	notification.failed = true
+	notification.failingReason = reason
+	st.notificationStorage[id] = notification
+	return nil
 }
 
 func (st *Storage) saveOrGetLink(link domain.Link) (int64, error) {
@@ -320,6 +392,16 @@ func (st *Storage) getNextSubscriptionID() int64 {
 	return newID
 }
 
+func (st *Storage) getNextNotificationID() int64 {
+	newID := st.currentMaxNotificationID.Add(1)
+	return newID
+}
+
 func normalizeURL(linkURL *url.URL) string {
 	return linkURL.String()
+}
+
+func cloneLinkUpdatedEvent(update model.LinkUpdatedEvent) model.LinkUpdatedEvent {
+	update.ChatIDs = append([]int64(nil), update.ChatIDs...)
+	return update
 }

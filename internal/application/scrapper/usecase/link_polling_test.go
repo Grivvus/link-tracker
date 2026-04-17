@@ -88,11 +88,9 @@ func TestLinkPollingUseCase_UpdateAndNotify_NewerUpdate(t *testing.T) {
 	t.Parallel()
 
 	repo := &fakeSubscriptionRepo{}
-	bot := &fakeBotPort{}
 	poller := LinkPollingUseCase{
 		logger:                 testUseCaseLogger(),
 		subscriptionRepository: repo,
-		botPort:                bot,
 	}
 
 	link, err := domain.NewLink("https://github.com/user/repo-updated")
@@ -108,11 +106,6 @@ func TestLinkPollingUseCase_UpdateAndNotify_NewerUpdate(t *testing.T) {
 	poller.updateAndNotify(context.Background(), link, expectedChatIDs, []model.LinkState{newState})
 
 	require.Len(t, repo.updatedLinks, 1)
-	require.Len(t, bot.events, 1)
-	gotEvent := bot.events[0]
-	assert.Equal(t, link.ID, gotEvent.LinkID)
-	assert.Equal(t, link.URL.String(), gotEvent.RawURL)
-	assert.Equal(t, expectedChatIDs, gotEvent.ChatIDs)
 }
 
 func TestLinkPollingUseCase_UpdateAndNotify_NoChanges(t *testing.T) {
@@ -123,7 +116,6 @@ func TestLinkPollingUseCase_UpdateAndNotify_NoChanges(t *testing.T) {
 	poller := LinkPollingUseCase{
 		logger:                 testUseCaseLogger(),
 		subscriptionRepository: repo,
-		botPort:                bot,
 	}
 
 	link, err := domain.NewLink("https://github.com/user/repo-no-changes")

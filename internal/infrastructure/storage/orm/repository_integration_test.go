@@ -262,12 +262,6 @@ func runSubscriptionScenario(t *testing.T, repos repoPair) subscriptionScenarioR
 	result.LinkSubscriptions = snapshotsFromSubscriptions(t, repos.sub, linkSubs)
 
 	allLinks, _ := repos.sub.GetAllLinks(ctx)
-	// // will block forever
-	//errs := make([]error, 0)
-	//for err := range errCh {
-	//	errs = append(errs, err)
-	//}
-	//require.Empty(t, errs)
 	result.AllLinks = linkURLs(allLinks)
 
 	foundLink, err := repos.sub.FindLinkByURL(ctx, linkA.URL)
