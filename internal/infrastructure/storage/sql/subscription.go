@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	gen "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql/gen"
@@ -214,7 +215,7 @@ func (repo *SubscriptionRepositorySQL) GetAllLinks(
 }
 
 func (repo *SubscriptionRepositorySQL) UpdateLink(
-	ctx context.Context, link domain.Link,
+	ctx context.Context, link domain.Link, updates []model.LinkUpdatedEvent,
 ) (domain.Link, error) {
 	// should never happen
 	if link.ID == 0 {
@@ -222,16 +223,37 @@ func (repo *SubscriptionRepositorySQL) UpdateLink(
 			"%w: expect link with valid ID", repository.ErrEntityNotFound,
 		)
 	}
-	updatedLink, err := repo.queries.UpdateLink(ctx, gen.UpdateLinkParams{
-		ID:         link.ID,
-		LastUpdate: pgtype.Timestamptz{Time: link.LastUpdate, Valid: true},
+	return withTx[domain.Link](ctx, repo.pool, repo.queries, func(q *gen.Queries) (domain.Link, error) {
+		for _, update := range updates {
+			encoded, err := update.Marshal()
+			if err != nil {
+				return domain.Link{}, fmt.Errorf(
+					"%w: can't encode update event with error %w",
+					repository.ErrBadParams, err,
+				)
+			}
+			_, err = q.AddNotificationEvent(ctx, gen.AddNotificationEventParams{
+				LinkID:             update.LinkID,
+				UpdatedAt:          pgtype.Timestamptz{Time: update.UpdatedAt, Valid: true},
+				FormedNotification: encoded,
+			})
+			if err != nil {
+				return domain.Link{}, fmt.Errorf(
+					"%w caused by: %w", repository.ErrUnknownDBError, err,
+				)
+			}
+		}
+		updatedLink, err := repo.queries.UpdateLink(ctx, gen.UpdateLinkParams{
+			ID:         link.ID,
+			LastUpdate: pgtype.Timestamptz{Time: link.LastUpdate, Valid: true},
+		})
+		if err != nil {
+			return domain.Link{}, fmt.Errorf(
+				"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
+			)
+		}
+		return toDomainLink(updatedLink)
 	})
-	if err != nil {
-		return domain.Link{}, fmt.Errorf(
-			"%w: msg - %v", repository.ErrUnknownDBError, err.Error(),
-		)
-	}
-	return toDomainLink(updatedLink)
 }
 
 func (repo *SubscriptionRepositorySQL) FindLinkByURL(

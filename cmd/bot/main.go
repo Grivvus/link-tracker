@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+const groupID = "bot-events-reader"
+
 func main() {
 	var exitCode = 0
 	// call os.Exit in defer, so all others defer blocks could be called
@@ -105,26 +107,28 @@ func main() {
 	pb.RegisterBotServer(grpcServ, server.NewBotGRPCServer(logger, bp))
 
 	if cfg.NotificationMethod == "kafka" {
-		dlqWriter := &kafka.Writer{
-			Addr:        kafka.TCP(cfg.KafkaDLQTopic),
-			Topic:       cfg.KafkaDLQTopic,
-			Balancer:    &kafka.LeastBytes{},
-			Logger:      kafka.LoggerFunc(logger.Info),
-			ErrorLogger: kafka.LoggerFunc(logger.Error),
-		}
 		brokers, err := cfg.KafkaBrokers()
 		if err != nil {
 			logger.Error("invalid kafka brokers", "err", err)
 			exitCode = 1
 			return
 		}
+		dlqWriter := &kafka.Writer{
+			Addr:        kafka.TCP(brokers...),
+			Topic:       cfg.KafkaDLQTopic,
+			Balancer:    &kafka.LeastBytes{},
+			Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
+			ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
+		}
 		notificationsReader := kafka.NewReader(kafka.ReaderConfig{
 			Topic:       cfg.KafkaTopic,
 			Brokers:     brokers,
-			Logger:      kafka.LoggerFunc(logger.Info),
-			ErrorLogger: kafka.LoggerFunc(logger.Error),
+			Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
+			ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
+			GroupID:     groupID,
 		})
 		defer func() { _ = dlqWriter.Close() }()
+		defer func() { _ = notificationsReader.Close() }()
 		reader := notifications.NewEventsReader(
 			logger, bp, notificationsReader, dlqWriter, cfg.KafkaMaxAttempts,
 		)

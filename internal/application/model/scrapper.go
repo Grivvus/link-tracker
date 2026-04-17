@@ -1,6 +1,11 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
+)
 
 type TrackLinkCmd struct {
 	ChatID int64
@@ -31,6 +36,25 @@ type LinkUpdatedEvent struct {
 	UpdateAuthor string
 	Description  string
 	ChatIDs      []int64
+}
+
+func (upd LinkUpdatedEvent) Marshal() ([]byte, error) {
+	updateDTO := bot.LinkUpdate{
+		Description:  upd.Description,
+		Id:           upd.LinkID,
+		UpdateAuthor: upd.UpdateAuthor,
+		Title:        upd.UpdateName,
+		TgChatIds:    upd.ChatIDs,
+		UpdatedAt:    upd.UpdatedAt.Format(time.RFC3339),
+		Url:          upd.RawURL,
+	}
+	return json.Marshal(updateDTO)
+}
+
+type OutboxLinkUpdateEvent struct {
+	ID     int64
+	LinkID int64
+	Event  LinkUpdatedEvent
 }
 
 type LinkState struct {

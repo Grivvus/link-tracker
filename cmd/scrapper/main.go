@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -105,12 +106,13 @@ func main() {
 			Logger:       kafka.LoggerFunc(logger.Info),
 			ErrorLogger:  kafka.LoggerFunc(logger.Error),
 		}
+		defer func() { _ = kw.Close() }()
 		botPort = adapters.NewBotKafkaAdapter(logger, kw)
 	} else {
 		botPort = adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	}
 
-	chatRepo, subscriptionRepo, err := newRepositories(ctx, cfg)
+	chatRepo, subscriptionRepo, notificationOutboxRepo, err := newRepositories(ctx, cfg)
 	if err != nil {
 		logger.Error("can't init repository", "err", err)
 		exitCode = 1
@@ -134,16 +136,25 @@ func main() {
 	)
 
 	sched, err := gocron.NewScheduler()
+	defer func() { _ = sched.Shutdown() }()
 	if err != nil {
 		logger.Error("can't init scheduler", "err", err)
 		exitCode = 1
 		return
 	}
-	poller := usecase.NewLinkPollingUseCase(
-		logger, sched, linkStatePort, botPort,
-		subscriptionRepo, chatRepo, int64(cfg.PollerIntervalMinutes),
+	outbox := usecase.NewOutboxRelayUseCase(
+		logger, botPort,
+		notificationOutboxRepo,
+		sched, 50,
 	)
-	err = poller.Start(ctx, cfg.ConcurrencyBoundary)
+	poller := usecase.NewLinkPollingUseCase(
+		logger, sched, linkStatePort,
+		subscriptionRepo, int64(cfg.PollerIntervalMinutes),
+	)
+	_, err = outbox.Start(ctx, 30*time.Second)
+	_, err = poller.Start(ctx, cfg.ConcurrencyBoundary)
+
+	sched.Start()
 	if err != nil {
 		logger.Error("can't start polling service", "err", err)
 		exitCode = 1
@@ -171,36 +182,38 @@ func main() {
 
 func newRepositories(
 	ctx context.Context, cfg infrastructure.Config,
-) (repository.ChatRepository, repository.SubscriptionRepository, error) {
+) (repository.ChatRepository, repository.SubscriptionRepository, repository.NotificationOutboxRepository, error) {
 	switch cfg.DBAccessType {
 	case "SQL":
 		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		pool, err := pgxpool.NewWithConfig(ctx, poolConf)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		chat := sql.NewChatRepository(pool)
 		sub := sql.NewSubscriptionRepository(pool, cfg.DBLinksPageSize)
-		return chat, sub, nil
+		outbox := sql.NewNotificationOutboxRepository(pool)
+		return chat, sub, outbox, nil
 	case "ORM":
 		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		pool, err := pgxpool.NewWithConfig(ctx, poolConf)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		chat := orm.NewChatRepository(pool)
 		sub := orm.NewSubscriptionRepository(pool, cfg.DBLinksPageSize)
-		return chat, sub, nil
+		outbox := orm.NewNotificationOutboxRepository(pool)
+		return chat, sub, outbox, nil
 	case "MEM":
 		st := storage.New()
-		return st, st, nil
+		return st, st, st, nil
 	default:
-		return nil, nil, errors.New("unreachable")
+		return nil, nil, nil, errors.New("unreachable")
 	}
 }

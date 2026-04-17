@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
@@ -14,16 +15,18 @@ import (
 const initialCap = 10
 
 type Storage struct {
-	linkStorage            map[int64]domain.Link
-	subscriptionStorage    map[int64]domain.Subscription
-	linkIDByURL            map[string]int64
-	subscriptionIDByChatID map[int64]map[int64]int64
-	chatStorage            map[int64]struct{}
-	currentMaxLinkID       atomic.Int64
-	currentMaxSubID        atomic.Int64
-	rwmuChat               sync.RWMutex
-	rwmuLink               sync.RWMutex
-	rwmuSubscription       sync.RWMutex
+	linkStorage              map[int64]domain.Link
+	subscriptionStorage      map[int64]domain.Subscription
+	linkIDByURL              map[string]int64
+	subscriptionIDByChatID   map[int64]map[int64]int64
+	chatStorage              map[int64]struct{}
+	notificationStorage      map[int64]any
+	currentMaxLinkID         atomic.Int64
+	currentMaxSubID          atomic.Int64
+	currentMaxNotificationID atomic.Int64
+	rwmuChat                 sync.RWMutex
+	rwmuLink                 sync.RWMutex
+	rwmuSubscription         sync.RWMutex
 }
 
 func New() *Storage {
@@ -33,6 +36,7 @@ func New() *Storage {
 		linkIDByURL:            make(map[string]int64, initialCap),
 		subscriptionIDByChatID: make(map[int64]map[int64]int64, initialCap),
 		chatStorage:            make(map[int64]struct{}, initialCap),
+		notificationStorage:    make(map[int64]any, initialCap),
 	}
 }
 
@@ -147,10 +151,16 @@ func (st *Storage) GetLink(_ context.Context, linkID int64) (domain.Link, error)
 	return link, nil
 }
 
-func (st *Storage) UpdateLink(_ context.Context, link domain.Link) (domain.Link, error) {
+func (st *Storage) UpdateLink(
+	_ context.Context, link domain.Link, updates []model.LinkUpdatedEvent,
+) (domain.Link, error) {
 	_, err := st.saveOrGetLink(link)
 	if err != nil {
 		return domain.Link{}, err
+	}
+	for _, update := range updates {
+		nextID := st.currentMaxNotificationID.Add(1)
+		st.notificationStorage[nextID] = update
 	}
 	return link, nil
 }
@@ -242,6 +252,18 @@ func (st *Storage) Delete(_ context.Context, chatID int64) error {
 	}
 	delete(st.chatStorage, chatID)
 	return nil
+}
+
+func (st *Storage) GetPending(ctx context.Context, startsWith int64, limit int32) ([]model.OutboxLinkUpdateEvent, error) {
+	panic("not implemented")
+}
+
+func (st *Storage) MarkSent(ctx context.Context, ids []int64) error {
+	panic("not implemented")
+}
+
+func (st *Storage) MarkFailed(ctx context.Context, id int64, reason string) error {
+	panic("not implemented")
 }
 
 func (st *Storage) saveOrGetLink(link domain.Link) (int64, error) {

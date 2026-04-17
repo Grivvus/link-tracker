@@ -18,6 +18,16 @@ type Link struct {
 	LastUpdate pgtype.Timestamptz
 }
 
+type NotificationEvent struct {
+	ID                 int64
+	UpdatedAt          pgtype.Timestamptz
+	Failed             pgtype.Bool
+	FailingReason      pgtype.Text
+	Sent               pgtype.Bool
+	LinkID             int64
+	FormedNotification []byte
+}
+
 type Subscription struct {
 	ID     int64
 	LinkID int64

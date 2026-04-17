@@ -18,9 +18,7 @@ type LinkPollingUseCase struct {
 	sched                  gocron.Scheduler
 	logger                 *slog.Logger
 	linkState              ports.LinkStatePort
-	botPort                ports.BotPort
 	subscriptionRepository repository.SubscriptionRepository
-	chatRepository         repository.ChatRepository
 	ghClient               *clients.GitHubClient
 	stackoverflowClient    *clients.StackoverflowClient
 	pollerIntervalMinutes  int64
@@ -28,25 +26,25 @@ type LinkPollingUseCase struct {
 
 func NewLinkPollingUseCase(
 	logger *slog.Logger, sched gocron.Scheduler,
-	linkState ports.LinkStatePort, botPort ports.BotPort,
+	linkState ports.LinkStatePort,
 	subscriptionRepo repository.SubscriptionRepository,
-	chatRepo repository.ChatRepository, pollerIntervalMinutes int64,
+	pollerIntervalMinutes int64,
 ) LinkPollingUseCase {
 	return LinkPollingUseCase{
 		sched:                  sched,
 		logger:                 logger,
 		linkState:              linkState,
-		botPort:                botPort,
 		subscriptionRepository: subscriptionRepo,
-		chatRepository:         chatRepo,
 		ghClient:               clients.NewGitHubClient(logger),
 		stackoverflowClient:    clients.NewStackoverflowClient(logger),
 		pollerIntervalMinutes:  pollerIntervalMinutes,
 	}
 }
 
-func (poller *LinkPollingUseCase) Start(ctx context.Context, concurrencyBoundary uint) error {
-	_, err := poller.sched.NewJob(
+func (poller *LinkPollingUseCase) Start(
+	ctx context.Context, concurrencyBoundary uint,
+) (gocron.Job, error) {
+	job, err := poller.sched.NewJob(
 		gocron.DurationJob(time.Duration(poller.pollerIntervalMinutes)*time.Minute),
 		gocron.NewTask(func() {
 			var wg sync.WaitGroup
@@ -66,10 +64,9 @@ func (poller *LinkPollingUseCase) Start(ctx context.Context, concurrencyBoundary
 		}),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	poller.sched.Start()
-	return nil
+	return job, nil
 }
 
 func (poller *LinkPollingUseCase) linkWorkerFn(
@@ -119,24 +116,21 @@ func (poller *LinkPollingUseCase) updateAndNotify(
 	}
 	// something new
 	link.LastUpdate = youngestEvent
-	_, errU := poller.subscriptionRepository.UpdateLink(ctx, link)
+	updateEvents := make([]model.LinkUpdatedEvent, len(updates))
+	for i, update := range updates {
+		upd := model.LinkUpdatedEvent{
+			ChatIDs:      subsChatIDs,
+			UpdatedAt:    update.UpdatedAt,
+			UpdateAuthor: update.UpdatedBy,
+			UpdateName:   update.Title,
+			LinkID:       link.ID,
+			RawURL:       link.URL.String(),
+			Description:  update.UpdateInfo,
+		}
+		updateEvents[i] = upd
+	}
+	_, errU := poller.subscriptionRepository.UpdateLink(ctx, link, updateEvents)
 	if errU != nil {
 		poller.logger.Error("can't update link state", "err", errU)
-	}
-	for _, update := range updates {
-		errN := poller.botPort.NotifyAboutUpdatedLinks(
-			ctx, model.LinkUpdatedEvent{
-				ChatIDs:      subsChatIDs,
-				UpdatedAt:    update.UpdatedAt,
-				UpdateAuthor: update.UpdatedBy,
-				UpdateName:   update.Title,
-				LinkID:       link.ID,
-				RawURL:       link.URL.String(),
-				Description:  update.UpdateInfo,
-			},
-		)
-		if errN != nil {
-			poller.logger.Error("can't notify about update", "err", errN)
-		}
 	}
 }

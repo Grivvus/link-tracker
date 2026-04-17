@@ -63,7 +63,7 @@ func (r *EventsReader) Start(ctx context.Context) {
 }
 
 func (r *EventsReader) handleMessage(ctx context.Context, msg kafka.Message) (bool, error) {
-	var update bot.PostUpdatesJSONRequestBody
+	var update bot.LinkUpdate
 	err := json.NewDecoder(bytes.NewReader(msg.Value)).Decode(&update)
 	if err != nil {
 		return r.writeDLQ(ctx, msg, fmt.Errorf("failed to decode update: %w", err))

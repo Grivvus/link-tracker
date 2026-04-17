@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
@@ -207,7 +208,7 @@ func (repo *SubscriptionRepositoryORM) GetAllLinks(
 }
 
 func (repo *SubscriptionRepositoryORM) UpdateLink(
-	ctx context.Context, link domain.Link,
+	ctx context.Context, link domain.Link, updates []model.LinkUpdatedEvent,
 ) (domain.Link, error) {
 	if link.ID == 0 {
 		return domain.Link{}, fmt.Errorf(
@@ -215,19 +216,40 @@ func (repo *SubscriptionRepositoryORM) UpdateLink(
 		)
 	}
 
-	dbLink, err := queryOne(ctx, repo.pool, dialect.
-		Update("link").
-		Set(goqu.Record{
-			"last_update": pgtype.Timestamptz{Time: link.LastUpdate, Valid: true},
-		}).
-		Where(goqu.Ex{"id": link.ID}).
-		Returning("id", "url", "last_update").
-		Prepared(true), pgx.RowToStructByName[Link])
-	if err != nil {
-		return domain.Link{}, wrapUnknownDBError(err)
-	}
+	return withTx(ctx, repo.pool, func(tx pgx.Tx) (domain.Link, error) {
+		for _, update := range updates {
+			encoded, err := update.Marshal()
+			if err != nil {
+				return domain.Link{}, fmt.Errorf(
+					"%w: can't encode update, caused by: %w",
+					repository.ErrBadParams, err,
+				)
+			}
+			_, err = queryOne(ctx, repo.pool, dialect.
+				Insert("notification_event").
+				Cols("updated_at", "link_id", "formed_notification").
+				Vals(goqu.Vals{update.UpdatedAt, update.LinkID, encoded}).
+				Returning("id", "updated_at", "link_id", "formed_notification").
+				Prepared(true), pgx.RowToStructByName[Notification],
+			)
+			if err != nil {
+				return domain.Link{}, wrapUnknownDBError(err)
+			}
+		}
+		dbLink, err := queryOne(ctx, repo.pool, dialect.
+			Update("link").
+			Set(goqu.Record{
+				"last_update": pgtype.Timestamptz{Time: link.LastUpdate, Valid: true},
+			}).
+			Where(goqu.Ex{"id": link.ID}).
+			Returning("id", "url", "last_update").
+			Prepared(true), pgx.RowToStructByName[Link])
+		if err != nil {
+			return domain.Link{}, wrapUnknownDBError(err)
+		}
 
-	return toDomainLink(dbLink)
+		return toDomainLink(dbLink)
+	})
 }
 
 func (repo *SubscriptionRepositoryORM) FindLinkByURL(
