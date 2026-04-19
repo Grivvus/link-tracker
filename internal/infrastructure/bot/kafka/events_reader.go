@@ -15,6 +15,9 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 )
 
+var ErrRetryPolicyExceeded = fmt.Errorf("retry policy exceeded")
+var ErrBadSerialization = fmt.Errorf("failed to decode update")
+
 type EventsReader struct {
 	logger       *slog.Logger
 	port         ports.BotPort
@@ -66,7 +69,7 @@ func (r *EventsReader) handleMessage(ctx context.Context, msg kafka.Message) (bo
 	var update bot.LinkUpdate
 	err := json.NewDecoder(bytes.NewReader(msg.Value)).Decode(&update)
 	if err != nil {
-		return r.writeDLQ(ctx, msg, fmt.Errorf("failed to decode update: %w", err))
+		return r.writeDLQ(ctx, msg, fmt.Errorf("%w: %w", ErrBadSerialization, err))
 	}
 	updatedAt, err := time.Parse(time.RFC3339, update.UpdatedAt)
 	if err != nil {
@@ -87,7 +90,7 @@ func (r *EventsReader) handleMessage(ctx context.Context, msg kafka.Message) (bo
 			return true, nil
 		}
 	}
-	return r.writeDLQ(ctx, msg, fmt.Errorf("retry policy exceeded"))
+	return r.writeDLQ(ctx, msg, ErrRetryPolicyExceeded)
 }
 
 func (r *EventsReader) writeDLQ(
