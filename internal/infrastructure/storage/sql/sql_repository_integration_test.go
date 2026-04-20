@@ -79,7 +79,7 @@ type SQLRepositoryIntegrationSuite struct {
 }
 
 func TestRepositoryIntegrationSuite(t *testing.T) {
-	suite.Run(t, new(SQLRepositoryIntegrationSuite))
+	suite.Run(t, &SQLRepositoryIntegrationSuite{})
 }
 
 func (s *SQLRepositoryIntegrationSuite) SetupSuite() {

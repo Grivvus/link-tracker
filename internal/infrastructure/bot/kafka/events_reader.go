@@ -43,23 +43,28 @@ func NewEventsReader(
 func (r *EventsReader) Start(ctx context.Context) {
 	go func() {
 		for {
-			msg, err := r.eventsReader.FetchMessage(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				msg, err := r.eventsReader.FetchMessage(ctx)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return
+					}
+					r.logger.Error("ReadMessage error", "err", err)
+					continue
 				}
-				r.logger.Error("ReadMessage error", "err", err)
-				continue
-			}
-			ok, err := r.handleMessage(ctx, msg)
-			if err != nil {
-				r.logger.Error("Handle Message error", "err", err)
-			}
-			if !ok {
-				continue
-			}
-			if err := r.eventsReader.CommitMessages(ctx, msg); err != nil {
-				r.logger.Error("Commit Message error", "err", err)
+				ok, err := r.handleMessage(ctx, msg)
+				if err != nil {
+					r.logger.Error("Handle Message error", "err", err)
+				}
+				if !ok {
+					continue
+				}
+				if err := r.eventsReader.CommitMessages(ctx, msg); err != nil {
+					r.logger.Error("Commit Message error", "err", err)
+				}
 			}
 		}
 	}()
