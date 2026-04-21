@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
@@ -21,8 +22,8 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	botpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
+	botapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
+	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
@@ -33,36 +34,161 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func main() {
-	var exitCode = 0
-	defer func() {
-		os.Exit(exitCode)
-	}()
+const shutdownTimeout = 5 * time.Second
 
+type repositories struct {
+	chat         repository.ChatRepository
+	subscription repository.SubscriptionRepository
+	outbox       repository.NotificationOutboxRepository
+	close        func()
+}
+
+type scrapperRuntime struct {
+	logger       *slog.Logger
+	httpServer   *http.Server
+	grpcServer   *grpc.Server
+	listener     net.Listener
+	grpcPort     int
+	grpcClient   *grpc.ClientConn
+	kafkaWriter  *kafka.Writer
+	scheduler    gocron.Scheduler
+	closeStorage func()
+}
+
+func main() {
 	logger := slog.New(slog.NewTextHandler(
 		os.Stdout, &slog.HandlerOptions{AddSource: true},
 	))
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	if err := run(logger); err != nil {
+		logger.Error("scrapper stopped with error", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(logger *slog.Logger) (err error) {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	cfg, err := infrastructure.LoadConfig()
 	if err != nil {
-		logger.Error("can't load config", "err", err)
-		exitCode = 1
-		return
+		return fmt.Errorf("can't load config: %w", err)
 	}
 
-	var lisConf net.ListenConfig
-	lis, err := lisConf.Listen(ctx, "tcp", fmt.Sprintf(":%d", cfg.ScrapperGRPCPort))
+	app, err := newScrapperRuntime(ctx, cfg, logger)
 	if err != nil {
-		logger.Error("can't create tcp listener", "err", err)
-		exitCode = 1
-		return
+		return err
 	}
-	defer func() { _ = lis.Close() }()
-	grpcServer := grpc.NewServer()
-	defer grpcServer.GracefulStop()
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer shutdownCancel()
+		err = errors.Join(err, app.Close(shutdownCtx))
+	}()
+
+	return app.Run(ctx)
+}
+
+func newScrapperRuntime(
+	ctx context.Context, cfg infrastructure.Config, logger *slog.Logger,
+) (app *scrapperRuntime, err error) {
+	app = &scrapperRuntime{
+		logger:     logger,
+		grpcPort:   cfg.ScrapperGRPCPort,
+		grpcServer: grpc.NewServer(),
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer shutdownCancel()
+		err = errors.Join(err, app.Close(shutdownCtx))
+	}()
+
+	app.listener, err = newTCPListener(ctx, cfg.ScrapperGRPCPort)
+	if err != nil {
+		return nil, fmt.Errorf("can't create tcp listener: %w", err)
+	}
+
+	botPort, grpcClient, kafkaWriter, err := newBotPort(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	app.grpcClient = grpcClient
+	app.kafkaWriter = kafkaWriter
+
+	repos, err := newRepositories(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("can't init repository: %w", err)
+	}
+	app.closeStorage = repos.close
+
+	scrapperPort := adapters.NewScrapperAdapter(logger, repos.chat, repos.subscription)
+	app.httpServer = newScrapperHTTPServer(cfg, logger, scrapperPort)
+	pb.RegisterScrapperServer(app.grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
+
+	app.scheduler, err = newScheduler(ctx, cfg, logger, botPort, repos.outbox, repos.subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	return app, nil
+}
+
+func newTCPListener(ctx context.Context, port int) (net.Listener, error) {
+	var lisConf net.ListenConfig
+	return lisConf.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
+}
+
+func newScheduler(
+	ctx context.Context,
+	cfg infrastructure.Config,
+	logger *slog.Logger,
+	botPort ports.BotPort,
+	notificationOutboxRepo repository.NotificationOutboxRepository,
+	subscriptionRepo repository.SubscriptionRepository,
+) (gocron.Scheduler, error) {
+	linkStatePort := adapters.NewLinkStateAdapter(
+		logger,
+		clients.NewGitHubClient(logger),
+		clients.NewStackoverflowClient(logger),
+	)
+
+	sched, err := gocron.NewScheduler()
+	if err != nil {
+		return nil, fmt.Errorf("can't init scheduler: %w", err)
+	}
+
+	outbox := usecase.NewOutboxRelayUseCase(
+		logger, botPort,
+		notificationOutboxRepo,
+		sched, 50,
+	)
+	if _, err := outbox.Start(ctx, 30*time.Second); err != nil {
+		return nil, errors.Join(fmt.Errorf("can't start outbox relay: %w", err), sched.Shutdown())
+	}
+
+	poller := usecase.NewLinkPollingUseCase(
+		logger, sched, linkStatePort,
+		subscriptionRepo, int64(cfg.PollerIntervalMinutes),
+	)
+	if _, err := poller.Start(ctx, cfg.ConcurrencyBoundary); err != nil {
+		return nil, errors.Join(fmt.Errorf("can't start polling service: %w", err), sched.Shutdown())
+	}
+
+	return sched, nil
+}
+
+func newBotPort(
+	cfg infrastructure.Config, logger *slog.Logger,
+) (ports.BotPort, *grpc.ClientConn, *kafka.Writer, error) {
+	if cfg.NotificationMethod == "kafka" {
+		botPort, kafkaWriter, err := initKafkaClient(&cfg, logger)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return botPort, nil, kafkaWriter, nil
+	}
 
 	grpcClient, err := grpc.NewClient(
 		fmt.Sprintf("%v:%v", cfg.BotHost, cfg.BotGRPCPort),
@@ -71,142 +197,149 @@ func main() {
 	if err != nil {
 		const msg = "can't create grpc client"
 		if cfg.UseGRPC {
-			logger.Error(msg, "err", err)
-			exitCode = 1
-			return
+			return nil, nil, nil, fmt.Errorf("%s: %w", msg, err)
 		}
 		logger.Warn(msg, "err", err)
 	}
-	defer func() {
+
+	hc := http.Client{}
+	client, err := botapi.NewClient(cfg.BotURL, botapi.WithHTTPClient(&hc))
+	if err != nil {
 		if grpcClient != nil {
 			_ = grpcClient.Close()
 		}
-	}()
-	grpcBotClient := botpb.NewBotClient(grpcClient)
-
-	hc := http.Client{}
-	client, err := bot.NewClient(cfg.BotURL, bot.WithHTTPClient(&hc))
-	if err != nil {
-		logger.Error("can't init bot http client", "err", err)
-		exitCode = 1
-		return
-	}
-	var botPort ports.BotPort
-	if cfg.NotificationMethod == "kafka" {
-		var kw *kafka.Writer
-		botPort, kw, err = initKafkaClient(&cfg, logger)
-		if err != nil {
-			exitCode = 1
-			return
-		}
-		defer func() { _ = kw.Close() }()
-	} else {
-		botPort = adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
+		return nil, nil, nil, fmt.Errorf("can't init bot http client: %w", err)
 	}
 
-	chatRepo, subscriptionRepo, notificationOutboxRepo, err := newRepositories(ctx, cfg)
-	if err != nil {
-		logger.Error("can't init repository", "err", err)
-		exitCode = 1
-		return
-	}
-	scrapperPort := adapters.NewScrapperAdapter(logger, chatRepo, subscriptionRepo)
-	var httpServInterface scrapper.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
-	mux := http.NewServeMux()
-	h := scrapper.HandlerFromMux(httpServInterface, mux)
-	httpServer := http.Server{
-		Addr:    cfg.ServerURL,
-		Handler: h,
+	var grpcBotClient botpb.BotClient
+	if grpcClient != nil {
+		grpcBotClient = botpb.NewBotClient(grpcClient)
 	}
 
-	pb.RegisterScrapperServer(grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
-
-	linkStatePort := adapters.NewLinkStateAdapter(
-		logger,
-		clients.NewGitHubClient(logger),
-		clients.NewStackoverflowClient(logger),
-	)
-
-	sched, err := gocron.NewScheduler()
-	defer func() { _ = sched.Shutdown() }()
-	if err != nil {
-		logger.Error("can't init scheduler", "err", err)
-		exitCode = 1
-		return
-	}
-	outbox := usecase.NewOutboxRelayUseCase(
-		logger, botPort,
-		notificationOutboxRepo,
-		sched, 50,
-	)
-	poller := usecase.NewLinkPollingUseCase(
-		logger, sched, linkStatePort,
-		subscriptionRepo, int64(cfg.PollerIntervalMinutes),
-	)
-	_, err = outbox.Start(ctx, 30*time.Second)
-	_, err = poller.Start(ctx, cfg.ConcurrencyBoundary)
-
-	sched.Start()
-	if err != nil {
-		logger.Error("can't start polling service", "err", err)
-		exitCode = 1
-		return
-	}
-
-	go func() {
-		logger.Info("server has been started on", "addr", httpServer.Addr)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("server exit with error", "err", err)
-		}
-	}()
-
-	go func() {
-		logger.Info("grpc server has been started on", "port", cfg.ScrapperGRPCPort)
-		if err := grpcServer.Serve(lis); err != nil {
-			logger.Error("grpc server exit with error", "err", err)
-		}
-		logger.Info("grpc server has been stopped")
-	}()
-
-	<-ctx.Done()
-	logger.Info("scrapper was shut down")
+	return adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC), grpcClient, nil, nil
 }
 
-func newRepositories(
-	ctx context.Context, cfg infrastructure.Config,
-) (repository.ChatRepository, repository.SubscriptionRepository, repository.NotificationOutboxRepository, error) {
+func newScrapperHTTPServer(
+	cfg infrastructure.Config, logger *slog.Logger, scrapperPort ports.ScrapperPort,
+) *http.Server {
+	var httpServInterface scrapperapi.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
+	mux := http.NewServeMux()
+	handler := scrapperapi.HandlerFromMux(httpServInterface, mux)
+	return &http.Server{
+		Addr:    cfg.ServerURL,
+		Handler: handler,
+	}
+}
+
+func (app *scrapperRuntime) Run(ctx context.Context) error {
+	app.scheduler.Start()
+
+	errCh := make(chan error, 2)
+
+	go func() {
+		app.logger.Info("server has been started on", "addr", app.httpServer.Addr)
+		if err := app.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("http server exit with error: %w", err)
+		}
+	}()
+
+	go func() {
+		app.logger.Info("grpc server has been started on", "port", app.grpcPort)
+		if err := app.grpcServer.Serve(app.listener); err != nil {
+			errCh <- fmt.Errorf("grpc server exit with error: %w", err)
+		}
+		app.logger.Info("grpc server has been stopped")
+	}()
+
+	select {
+	case <-ctx.Done():
+		app.logger.Info("scrapper was shut down")
+		return nil
+	case err := <-errCh:
+		return err
+	}
+}
+
+func (app *scrapperRuntime) Close(ctx context.Context) error {
+	var err error
+	if app.httpServer != nil {
+		err = joinRuntimeErr(err, app.httpServer.Shutdown(ctx))
+	}
+	if app.scheduler != nil {
+		err = joinRuntimeErr(err, app.scheduler.Shutdown())
+	}
+	if app.grpcServer != nil {
+		app.grpcServer.GracefulStop()
+	}
+	if app.listener != nil {
+		err = joinRuntimeErr(err, app.listener.Close())
+	}
+	if app.grpcClient != nil {
+		err = joinRuntimeErr(err, app.grpcClient.Close())
+	}
+	if app.kafkaWriter != nil {
+		err = joinRuntimeErr(err, app.kafkaWriter.Close())
+	}
+	if app.closeStorage != nil {
+		app.closeStorage()
+	}
+	return err
+}
+
+func joinRuntimeErr(base error, next error) error {
+	switch {
+	case next == nil:
+		return base
+	case errors.Is(next, http.ErrServerClosed):
+		return base
+	case errors.Is(next, net.ErrClosed):
+		return base
+	default:
+		return errors.Join(base, next)
+	}
+}
+
+func newRepositories(ctx context.Context, cfg infrastructure.Config) (repositories, error) {
 	switch cfg.DBAccessType {
 	case "SQL":
 		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
 		if err != nil {
-			return nil, nil, nil, err
+			return repositories{}, err
 		}
 		pool, err := pgxpool.NewWithConfig(ctx, poolConf)
 		if err != nil {
-			return nil, nil, nil, err
+			return repositories{}, err
 		}
-		chat := sql.NewChatRepository(pool)
-		sub := sql.NewSubscriptionRepository(pool, cfg.DBLinksPageSize)
-		outbox := sql.NewNotificationOutboxRepository(pool)
-		return chat, sub, outbox, nil
+		return repositories{
+			chat:         sql.NewChatRepository(pool),
+			subscription: sql.NewSubscriptionRepository(pool, cfg.DBLinksPageSize),
+			outbox:       sql.NewNotificationOutboxRepository(pool),
+			close:        pool.Close,
+		}, nil
 	case "ORM":
 		poolConf, err := pgxpool.ParseConfig(cfg.DBConnString)
 		if err != nil {
-			return nil, nil, nil, err
+			return repositories{}, err
 		}
 		pool, err := pgxpool.NewWithConfig(ctx, poolConf)
 		if err != nil {
-			return nil, nil, nil, err
+			return repositories{}, err
 		}
-		chat := orm.NewChatRepository(pool)
-		sub := orm.NewSubscriptionRepository(pool, cfg.DBLinksPageSize)
-		outbox := orm.NewNotificationOutboxRepository(pool)
-		return chat, sub, outbox, nil
+		return repositories{
+			chat:         orm.NewChatRepository(pool),
+			subscription: orm.NewSubscriptionRepository(pool, cfg.DBLinksPageSize),
+			outbox:       orm.NewNotificationOutboxRepository(pool),
+			close:        pool.Close,
+		}, nil
 	case "MEM":
 		st := storage.New()
-		return st, st, st, nil
+		return repositories{
+			chat:         st,
+			subscription: st,
+			outbox:       st,
+		}, nil
 	default:
-		return nil, nil, nil, errors.New("unreachable")
+		return repositories{}, errors.New("unreachable")
 	}
 }
 
