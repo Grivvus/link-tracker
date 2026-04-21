@@ -5,23 +5,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"time"
+	"strconv"
 
 	"github.com/segmentio/kafka-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 )
 
 type BotKafkaAdapter struct {
 	logger      *slog.Logger
 	kafkaWriter *kafka.Writer
+	avroCodec   *avro.Codec
 }
 
-func NewBotKafkaAdapter(logger *slog.Logger, kw *kafka.Writer) ports.BotPort {
+func NewBotKafkaAdapter(
+	logger *slog.Logger, kw *kafka.Writer, codec *avro.Codec,
+) ports.BotPort {
 	return &BotKafkaAdapter{
 		logger:      logger,
 		kafkaWriter: kw,
+		avroCodec:   codec,
 	}
 }
 
@@ -34,22 +38,14 @@ func (b *BotKafkaAdapter) NotifyAboutUpdatedLinks(
 func (b *BotKafkaAdapter) kafkaNotify(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
-	var body = bot.LinkUpdate{
-		Id:           event.LinkID,
-		Description:  event.Description,
-		TgChatIds:    event.ChatIDs,
-		Url:          event.RawURL,
-		Title:        event.UpdateName,
-		UpdateAuthor: event.UpdateAuthor,
-		UpdatedAt:    event.UpdatedAt.Format(time.RFC3339),
-	}
-	key, err := json.Marshal(body.Id)
+	rawKey := strconv.Itoa(int(event.LinkID)) + event.UpdateName
+	key, err := json.Marshal(rawKey)
 	if err != nil {
 		return fmt.Errorf("%w: can't encode message", ports.ErrBadParams)
 	}
-	value, err := json.Marshal(body)
+	value, err := b.avroCodec.Encode(event)
 	if err != nil {
-		return fmt.Errorf("%w: can't encode message", ports.ErrBadParams)
+		return fmt.Errorf("%w: can't encode message - %w", ports.ErrBadParams, err)
 	}
 
 	err = b.kafkaWriter.WriteMessages(ctx, kafka.Message{

@@ -34,7 +34,8 @@ type Config struct {
 	KafkaBrokersRaw       string `envconfig:"KAFKA_BROKERS"`
 	KafkaTopic            string `envconfig:"KAFKA_TOPIC"`
 	KafkaDLQTopic         string `envconfig:"KAFKA_DLQ_TOPIC"`
-	KafkaMaxAttempts      int    `json:"KAFKA_MAX_ATTEMPTS" default:"5"`
+	KafkaMaxAttempts      int    `envconfig:"KAFKA_MAX_ATTEMPTS" default:"5"`
+	SchemaRegistryURL     string `envconfig:"SCHEMA_REGISTRY_URL"`
 }
 
 func (c *Config) KafkaBrokers() ([]string, error) {
@@ -82,6 +83,9 @@ func LoadConfig() (Config, error) {
 				"%w: KAFKA_BROKERS, KAFKTA_TOPIC and KAFKA_DLQ_TOPIC must be set",
 				ErrInvalidEnv,
 			)
+		}
+		if cfg.SchemaRegistryURL == "" {
+			return cfg, fmt.Errorf("%w: SCHEMA_REGISTRY_URL must be set", ErrInvalidEnv)
 		}
 	}
 	return cfg, nil

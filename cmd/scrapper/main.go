@@ -18,6 +18,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/usecase"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	botpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
@@ -107,7 +108,15 @@ func main() {
 			ErrorLogger:  kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
 		}
 		defer func() { _ = kw.Close() }()
-		botPort = adapters.NewBotKafkaAdapter(logger, kw)
+		codec, err := avro.NewCodec(
+			cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
+		)
+		if err != nil {
+			logger.Error("can't init avro codec", "err", err)
+			exitCode = 1
+			return
+		}
+		botPort = adapters.NewBotKafkaAdapter(logger, kw, codec)
 	} else {
 		botPort = adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	}

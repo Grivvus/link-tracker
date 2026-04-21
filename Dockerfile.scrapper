@@ -15,6 +15,7 @@ RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/scrapper /usr/bin/scrapper
 COPY --from=builder /app/.env /.env
+COPY --from=builder /app/avro/link_update.avsc /link_update.avsc
 RUN chmod +x /usr/bin/scrapper
 
 ENTRYPOINT ["/usr/bin/scrapper"]

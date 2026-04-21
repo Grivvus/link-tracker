@@ -12,6 +12,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/adapters"
 	notifications "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/kafka"
@@ -129,8 +130,16 @@ func main() {
 		})
 		defer func() { _ = dlqWriter.Close() }()
 		defer func() { _ = notificationsReader.Close() }()
+		codec, err := avro.NewCodec(
+			cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
+		)
+		if err != nil {
+			logger.Error("can't create avro codec", "err", err)
+			exitCode = 1
+			return
+		}
 		reader := notifications.NewEventsReader(
-			logger, bp, notificationsReader, dlqWriter, cfg.KafkaMaxAttempts,
+			logger, bp, notificationsReader, dlqWriter, codec, cfg.KafkaMaxAttempts,
 		)
 		reader.Start(ctx)
 	}
