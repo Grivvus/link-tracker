@@ -92,7 +92,9 @@ func newBotRuntime(
 		}
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer shutdownCancel()
-		err = errors.Join(err, app.Close(shutdownCtx))
+		if app != nil {
+			err = errors.Join(err, app.Close(shutdownCtx))
+		}
 	}()
 
 	app.listener, err = newTCPListener(ctx, cfg.BotGRPCPort)
