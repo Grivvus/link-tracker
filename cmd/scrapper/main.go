@@ -103,8 +103,8 @@ func main() {
 			Topic:        cfg.KafkaTopic,
 			Balancer:     &kafka.LeastBytes{},
 			RequiredAcks: kafka.RequireOne,
-			Logger:       kafka.LoggerFunc(logger.Info),
-			ErrorLogger:  kafka.LoggerFunc(logger.Error),
+			Logger:       kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
+			ErrorLogger:  kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
 		}
 		defer func() { _ = kw.Close() }()
 		botPort = adapters.NewBotKafkaAdapter(logger, kw)

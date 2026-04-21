@@ -34,7 +34,7 @@ func (b *BotKafkaAdapter) NotifyAboutUpdatedLinks(
 func (b *BotKafkaAdapter) kafkaNotify(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
-	var body = bot.PostUpdatesJSONRequestBody{
+	var body = bot.LinkUpdate{
 		Id:           event.LinkID,
 		Description:  event.Description,
 		TgChatIds:    event.ChatIDs,

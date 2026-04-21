@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "LinkUpdate",
+  "namespace": "link_tracker.events",
+  "fields": [
+    {"name": "id", "type": "long"},
+    {"name": "url", "type": "string"},
+    {"name": "title", "type": "string"},
+    {"name": "description", "type": "string"},
+    {"name": "updateAuthor", "type": "string"},
+    {"name": "updatedAt", "type": "string"},
+    {"name": "tgChatIds", "type": {"type": "array", "items": "long"}}
+  ]
+}
