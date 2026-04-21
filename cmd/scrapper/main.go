@@ -93,30 +93,13 @@ func main() {
 	}
 	var botPort ports.BotPort
 	if cfg.NotificationMethod == "kafka" {
-		brokers, err := cfg.KafkaBrokers()
+		var kw *kafka.Writer
+		botPort, kw, err = initKafkaClient(&cfg, logger)
 		if err != nil {
-			logger.Error("can't get kafka brokers", "err", err)
 			exitCode = 1
 			return
-		}
-		kw := &kafka.Writer{
-			Addr:         kafka.TCP(brokers...),
-			Topic:        cfg.KafkaTopic,
-			Balancer:     &kafka.LeastBytes{},
-			RequiredAcks: kafka.RequireOne,
-			Logger:       kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
-			ErrorLogger:  kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
 		}
 		defer func() { _ = kw.Close() }()
-		codec, err := avro.NewCodec(
-			cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
-		)
-		if err != nil {
-			logger.Error("can't init avro codec", "err", err)
-			exitCode = 1
-			return
-		}
-		botPort = adapters.NewBotKafkaAdapter(logger, kw, codec)
 	} else {
 		botPort = adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC)
 	}
@@ -225,4 +208,29 @@ func newRepositories(
 	default:
 		return nil, nil, nil, errors.New("unreachable")
 	}
+}
+
+func initKafkaClient(cfg *infrastructure.Config, logger *slog.Logger) (ports.BotPort, *kafka.Writer, error) {
+	brokers, err := cfg.KafkaBrokers()
+	if err != nil {
+		logger.Error("can't get kafka brokers", "err", err)
+		return nil, nil, err
+	}
+	kw := &kafka.Writer{
+		Addr:         kafka.TCP(brokers...),
+		Topic:        cfg.KafkaTopic,
+		Balancer:     &kafka.LeastBytes{},
+		RequiredAcks: kafka.RequireOne,
+		Logger:       kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
+		ErrorLogger:  kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
+	}
+	codec, err := avro.NewCodec(
+		cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
+	)
+	if err != nil {
+		logger.Error("can't init avro codec", "err", err)
+		return nil, nil, err
+	}
+	botPort := adapters.NewBotKafkaAdapter(logger, kw, codec)
+	return botPort, kw, nil
 }

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 
 	"github.com/segmentio/kafka-go"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot"
@@ -108,40 +109,13 @@ func main() {
 	pb.RegisterBotServer(grpcServ, server.NewBotGRPCServer(logger, bp))
 
 	if cfg.NotificationMethod == "kafka" {
-		brokers, err := cfg.KafkaBrokers()
+		reader, writer, err := initKafka(ctx, &cfg, logger, bp)
 		if err != nil {
-			logger.Error("invalid kafka brokers", "err", err)
-			exitCode = 1
+			exitCode = 0
 			return
 		}
-		dlqWriter := &kafka.Writer{
-			Addr:        kafka.TCP(brokers...),
-			Topic:       cfg.KafkaDLQTopic,
-			Balancer:    &kafka.LeastBytes{},
-			Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
-			ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
-		}
-		notificationsReader := kafka.NewReader(kafka.ReaderConfig{
-			Topic:       cfg.KafkaTopic,
-			Brokers:     brokers,
-			Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
-			ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
-			GroupID:     groupID,
-		})
-		defer func() { _ = dlqWriter.Close() }()
-		defer func() { _ = notificationsReader.Close() }()
-		codec, err := avro.NewCodec(
-			cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
-		)
-		if err != nil {
-			logger.Error("can't create avro codec", "err", err)
-			exitCode = 1
-			return
-		}
-		reader := notifications.NewEventsReader(
-			logger, bp, notificationsReader, dlqWriter, codec, cfg.KafkaMaxAttempts,
-		)
-		reader.Start(ctx)
+		defer func() { _ = reader.Close() }()
+		defer func() { _ = writer.Close() }()
 	}
 
 	go func() {
@@ -165,4 +139,41 @@ func main() {
 	}()
 	<-ctx.Done()
 	slog.Info("Catching signal, shut down application")
+}
+
+func initKafka(
+	ctx context.Context, cfg *infrastructure.Config,
+	logger *slog.Logger, bp ports.BotPort,
+) (*kafka.Reader, *kafka.Writer, error) {
+	brokers, err := cfg.KafkaBrokers()
+	if err != nil {
+		logger.Error("invalid kafka brokers", "err", err)
+		return nil, nil, err
+	}
+	dlqWriter := &kafka.Writer{
+		Addr:        kafka.TCP(brokers...),
+		Topic:       cfg.KafkaDLQTopic,
+		Balancer:    &kafka.LeastBytes{},
+		Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
+		ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
+	}
+	notificationsReader := kafka.NewReader(kafka.ReaderConfig{
+		Topic:       cfg.KafkaTopic,
+		Brokers:     brokers,
+		Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
+		ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
+		GroupID:     groupID,
+	})
+	codec, err := avro.NewCodec(
+		cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
+	)
+	if err != nil {
+		logger.Error("can't create avro codec", "err", err)
+		return nil, nil, err
+	}
+	reader := notifications.NewEventsReader(
+		logger, bp, notificationsReader, dlqWriter, codec, cfg.KafkaMaxAttempts,
+	)
+	reader.Start(ctx)
+	return notificationsReader, dlqWriter, nil
 }
