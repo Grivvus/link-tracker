@@ -78,11 +78,14 @@ func LoadConfig() (Config, error) {
 	}
 
 	if cfg.NotificationMethod == "kafka" {
-		if cfg.KafkaBrokersRaw == "" && cfg.KafkaTopic == "" && cfg.KafkaDLQTopic == "" {
+		if cfg.KafkaBrokersRaw == "" {
 			return cfg, fmt.Errorf(
-				"%w: KAFKA_BROKERS, KAFKTA_TOPIC and KAFKA_DLQ_TOPIC must be set",
+				"%w: KAFKA_BROKERS must be set",
 				ErrInvalidEnv,
 			)
+		}
+		if cfg.KafkaTopic == "" || cfg.KafkaDLQTopic == "" {
+			return cfg, fmt.Errorf("%w: all kafka topics must be set", ErrInvalidEnv)
 		}
 		if cfg.SchemaRegistryURL == "" {
 			return cfg, fmt.Errorf("%w: SCHEMA_REGISTRY_URL must be set", ErrInvalidEnv)
