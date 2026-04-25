@@ -24,6 +24,17 @@ type Codec struct {
 	schemaID int
 }
 
+func NewCodecFromSchema(schema string, schemaID int) (*Codec, error) {
+	avroCodec, err := goavro.NewCodec(schema)
+	if err != nil {
+		return nil, err
+	}
+	return &Codec{
+		codec:    avroCodec,
+		schemaID: schemaID,
+	}, nil
+}
+
 func NewCodec(
 	schemaRegistryURL string, topic string, registryFilename string,
 ) (*Codec, error) {
@@ -71,6 +82,9 @@ func (c *Codec) Encode(msg model.LinkUpdatedEvent) ([]byte, error) {
 }
 
 func (c *Codec) Decode(msg []byte) (model.LinkUpdatedEvent, error) {
+	if len(msg) < 5 {
+		return model.LinkUpdatedEvent{}, fmt.Errorf("%w: message is too short", DeserializationError)
+	}
 	native, _, err := c.codec.NativeFromBinary(msg[5:])
 	if err != nil {
 		return model.LinkUpdatedEvent{}, fmt.Errorf("%w: %w", DeserializationError, err)

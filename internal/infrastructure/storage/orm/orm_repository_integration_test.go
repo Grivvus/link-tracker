@@ -1,3 +1,5 @@
+//go:build integrational
+
 package orm_test
 
 import (

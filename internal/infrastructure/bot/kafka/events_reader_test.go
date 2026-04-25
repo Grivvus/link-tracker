@@ -1,3 +1,5 @@
+//go:build integrational
+
 package kafka_test
 
 import (
@@ -8,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,8 +24,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/kafka"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 )
 
 const groupID = "bot-events-reader"
@@ -31,6 +34,8 @@ const dlqTopicPrefix = "test-dlq-topic"
 const clusterID = "MkU3OEVBNTcwNTJENDM2Qk"
 const brokerAddr = "127.0.0.1:29092"
 const brokerPort = "29092"
+const avroSchemaPath = "../../../../avro/link_update.avsc"
+const testSchemaID = 66
 
 type BotAdapterTestImpl struct {
 	mu           sync.RWMutex
@@ -78,14 +83,14 @@ func (bot *BotAdapterFailingExact3Times) NotifyAboutUpdatedLinks(
 
 const msgID = 123
 
-var msg = bot.LinkUpdate{
+var msg = model.LinkUpdatedEvent{
 	Description:  "description 123",
-	Id:           msgID,
-	TgChatIds:    []int64{123, 124},
-	Title:        "update 123",
+	LinkID:       msgID,
+	ChatIDs:      []int64{123, 124},
+	UpdateName:   "update 123",
 	UpdateAuthor: "Ivanovich",
-	UpdatedAt:    time.Now().Format(time.RFC3339),
-	Url:          "https://github.com/torvalds/linux",
+	UpdatedAt:    time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC),
+	RawURL:       "https://github.com/torvalds/linux",
 }
 
 type EventsReaderTestSuite struct {
@@ -95,6 +100,7 @@ type EventsReaderTestSuite struct {
 	eventsTopic   string
 	dlqTopic      string
 	kafkaService  testcontainers.Container
+	avroCodec     *avro.Codec
 
 	kafkaEventsWriter *kafkaClient.Writer
 	kafkaEventsReader *kafkaClient.Reader
@@ -143,6 +149,11 @@ func (s *EventsReaderTestSuite) SetupSuite() {
 		})
 	s.Require().NoError(err)
 	s.Require().NoError(waitBrokerReady(context.Background(), brokerAddr))
+
+	schema, err := os.ReadFile(avroSchemaPath)
+	s.Require().NoError(err)
+	s.avroCodec, err = avro.NewCodecFromSchema(string(schema), testSchemaID)
+	s.Require().NoError(err)
 }
 
 func (s *EventsReaderTestSuite) SetupTest() {
@@ -202,7 +213,7 @@ func TestEventsReaderTestSuite(t *testing.T) {
 func (s *EventsReaderTestSuite) TestEventsReader_ReadNewValidMessage() {
 	msgKey, err := json.Marshal(msgID)
 	s.Require().NoError(err)
-	msgValue, err := json.Marshal(msg)
+	msgValue, err := s.avroCodec.Encode(msg)
 	s.Require().NoError(err)
 
 	ctx, cancelFunc := context.WithCancel(s.ctx)
@@ -212,6 +223,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_ReadNewValidMessage() {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		botAdapter,
 		s.kafkaEventsReader, s.kafkaDLQWriter,
+		s.avroCodec,
 		5,
 	)
 	eventsReader.Start(ctx)
@@ -228,38 +240,17 @@ func (s *EventsReaderTestSuite) TestEventsReader_ReadNewValidMessage() {
 	botAdapter.mu.RLock()
 	defer botAdapter.mu.RUnlock()
 	s.Require().Len(botAdapter.SentMessages, 1)
-	s.Assert().EqualValues(123, botAdapter.SentMessages[0].LinkID)
+	s.Assert().Equal(msg, botAdapter.SentMessages[0])
 }
 
-func (s *EventsReaderTestSuite) TestEventsReader_WriteToDLQAfterSerializationError() {
+func (s *EventsReaderTestSuite) TestEventsReader_WriteToDLQAfterDeserializationError() {
 	msgKey, err := json.Marshal(msgID)
 	s.Require().NoError(err)
 
 	botAdapter := &BotAdapterTestImpl{}
 	s.writeInvalidMessageAndAssertDLQ(botAdapter, kafkaClient.Message{
 		Key:   msgKey,
-		Value: []byte("not-json"),
-	})
-
-	botAdapter.mu.RLock()
-	defer botAdapter.mu.RUnlock()
-	s.Assert().Empty(botAdapter.SentMessages)
-}
-
-func (s *EventsReaderTestSuite) TestEventsReader_WriteToDLQAfterUpdatedAtParseError() {
-	msgKey, err := json.Marshal(msgID)
-	s.Require().NoError(err)
-
-	badUpdatedAtMsg := msg
-	badUpdatedAtMsg.UpdatedAt = "not-a-rfc3339-time"
-
-	msgValue, err := json.Marshal(badUpdatedAtMsg)
-	s.Require().NoError(err)
-
-	botAdapter := &BotAdapterTestImpl{}
-	s.writeInvalidMessageAndAssertDLQ(botAdapter, kafkaClient.Message{
-		Key:   msgKey,
-		Value: msgValue,
+		Value: []byte("bad"),
 	})
 
 	botAdapter.mu.RLock()
@@ -270,7 +261,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_WriteToDLQAfterUpdatedAtParseEr
 func (s *EventsReaderTestSuite) TestEventsReader_DoesNotWriteToDLQWhenRetryPolicyNotExceeded() {
 	msgKey, err := json.Marshal(msgID)
 	s.Require().NoError(err)
-	msgValue, err := json.Marshal(msg)
+	msgValue, err := s.avroCodec.Encode(msg)
 	s.Require().NoError(err)
 
 	ctx, cancelFunc := context.WithCancel(s.ctx)
@@ -281,6 +272,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_DoesNotWriteToDLQWhenRetryPolic
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		botAdapter,
 		s.kafkaEventsReader, s.kafkaDLQWriter,
+		s.avroCodec,
 		5,
 	)
 	eventsReader.Start(ctx)
@@ -298,14 +290,14 @@ func (s *EventsReaderTestSuite) TestEventsReader_DoesNotWriteToDLQWhenRetryPolic
 	botAdapter.mu.RLock()
 	defer botAdapter.mu.RUnlock()
 	s.Require().Len(botAdapter.SentMessages, 1)
-	s.Assert().EqualValues(msgID, botAdapter.SentMessages[0].LinkID)
+	s.Assert().Equal(msg, botAdapter.SentMessages[0])
 	s.assertDLQIsEmpty()
 }
 
 func (s *EventsReaderTestSuite) TestEventsReader_WritesToDLQWhenRetryPolicyExceeded() {
 	msgKey, err := json.Marshal(msgID)
 	s.Require().NoError(err)
-	msgValue, err := json.Marshal(msg)
+	msgValue, err := s.avroCodec.Encode(msg)
 	s.Require().NoError(err)
 
 	ctx, cancelFunc := context.WithCancel(s.ctx)
@@ -316,6 +308,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_WritesToDLQWhenRetryPolicyExcee
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		botAdapter,
 		s.kafkaEventsReader, s.kafkaDLQWriter,
+		s.avroCodec,
 		3,
 	)
 	eventsReader.Start(ctx)
@@ -326,7 +319,10 @@ func (s *EventsReaderTestSuite) TestEventsReader_WritesToDLQWhenRetryPolicyExcee
 	})
 
 	s.Assert().Empty(botAdapter.SentMessages)
-	s.assertSingleMessageInDLQ(msgKey)
+	s.assertSingleMessageInDLQ(kafkaClient.Message{
+		Key:   msgKey,
+		Value: msgValue,
+	})
 }
 
 func (s *EventsReaderTestSuite) writeInvalidMessageAndAssertDLQ(
@@ -339,6 +335,7 @@ func (s *EventsReaderTestSuite) writeInvalidMessageAndAssertDLQ(
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		botAdapter,
 		s.kafkaEventsReader, s.kafkaDLQWriter,
+		s.avroCodec,
 		5,
 	)
 	eventsReader.Start(ctx)
@@ -352,6 +349,7 @@ func (s *EventsReaderTestSuite) writeInvalidMessageAndAssertDLQ(
 	dlqMsg, err := s.kafkaDLQReader.FetchMessage(readCtx)
 	s.Require().NoError(err)
 	s.Assert().Equal(msg.Key, dlqMsg.Key)
+	s.Assert().Equal(msg.Value, dlqMsg.Value)
 
 	s.assertDLQIsEmpty()
 }
@@ -415,13 +413,14 @@ func (s *EventsReaderTestSuite) writeMessageAndWaitReady(
 	s.Require().NoError(err)
 }
 
-func (s *EventsReaderTestSuite) assertSingleMessageInDLQ(expectedKey []byte) {
+func (s *EventsReaderTestSuite) assertSingleMessageInDLQ(expectedMsg kafkaClient.Message) {
 	readCtx, readCancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer readCancel()
 
 	dlqMsg, err := s.kafkaDLQReader.FetchMessage(readCtx)
 	s.Require().NoError(err)
-	s.Assert().Equal(expectedKey, dlqMsg.Key)
+	s.Assert().Equal(expectedMsg.Key, dlqMsg.Key)
+	s.Assert().Equal(expectedMsg.Value, dlqMsg.Value)
 	s.assertDLQIsEmpty()
 }
 

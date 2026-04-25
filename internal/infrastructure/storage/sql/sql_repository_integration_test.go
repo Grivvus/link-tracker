@@ -1,3 +1,5 @@
+//go:build integrational
+
 package sql_test
 
 import (

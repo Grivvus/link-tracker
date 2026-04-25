@@ -28,8 +28,12 @@ $(addprefix build_,$(MODULES)):
 ## test: run all unit tests
 .PHONY: test-unit
 test-unit:
-	@go test -coverpkg='gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/...' --race -count=1 -coverprofile='$(COVERAGE_FILE)' ./internal/...
+	@go test -coverpkg='gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/...' -race -count=1 -coverprofile='$(COVERAGE_FILE)' ./internal/...
 	@go tool cover -func='$(COVERAGE_FILE)' | grep ^total | tr -s '\t'
+
+.PHONY: test-integration
+test-integration:
+	@go test -race -tags=integrational -v ./internal/...
 
 .PHONY: lint
 lint:
