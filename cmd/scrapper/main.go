@@ -15,6 +15,7 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/segmentio/kafka-go"
+	"github.com/valkey-io/valkey-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/usecase"
@@ -25,6 +26,7 @@ import (
 	botapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/cache"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
@@ -53,6 +55,7 @@ type scrapperRuntime struct {
 	kafkaWriter  *kafka.Writer
 	scheduler    gocron.Scheduler
 	closeStorage func()
+	closeCache   func()
 }
 
 func main() {
@@ -66,7 +69,7 @@ func main() {
 	}
 }
 
-func run(logger *slog.Logger) (err error) {
+func run(logger *slog.Logger) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -90,8 +93,9 @@ func run(logger *slog.Logger) (err error) {
 
 func newScrapperRuntime(
 	ctx context.Context, cfg infrastructure.Config, logger *slog.Logger,
-) (app *scrapperRuntime, err error) {
-	app = &scrapperRuntime{
+) (*scrapperRuntime, error) {
+	var err error
+	app := &scrapperRuntime{
 		logger:     logger,
 		grpcPort:   cfg.ScrapperGRPCPort,
 		grpcServer: grpc.NewServer(),
@@ -123,7 +127,18 @@ func newScrapperRuntime(
 	}
 	app.closeStorage = repos.close
 
-	scrapperPort := adapters.NewScrapperAdapter(logger, repos.chat, repos.subscription)
+	baseScrapperPort := adapters.NewScrapperAdapter(logger, repos.chat, repos.subscription)
+	vkClient, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress: cfg.ValkeyClusterAddresse(),
+		Password:    cfg.ValkeyPassword,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("can't init valkey client: %w", err)
+	}
+	app.closeCache = vkClient.Close
+	linksCache := cache.NewValkeyLinksCache(logger, vkClient, time.Duration(cfg.ValkeyTTLSeconds)*time.Second)
+	scrapperPort := adapters.NewScrapperCachedAdapter(logger, baseScrapperPort, linksCache)
+
 	app.httpServer = newScrapperHTTPServer(cfg, logger, scrapperPort)
 	pb.RegisterScrapperServer(app.grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
@@ -282,6 +297,9 @@ func (app *scrapperRuntime) Close(ctx context.Context) error {
 	}
 	if app.closeStorage != nil {
 		app.closeStorage()
+	}
+	if app.closeCache != nil {
+		app.closeCache()
 	}
 	return err
 }

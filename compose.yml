@@ -11,10 +11,13 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
     ports:
       - "8000:8000"
       - "50051:50051"
     restart: no
+
   scrapper:
     build:
       context: .
@@ -24,6 +27,8 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
     ports:
       - "8001:8000"
       - "50052:50051"
@@ -54,6 +59,76 @@ services:
         condition: service_healthy
     env_file:
       - .env.goose
+
+  valkey-0:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    command: valkey-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-d0:/data
+
+  valkey-1:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    command: valkey-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-d1:/data
+
+  valkey-2:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    command: valkey-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-d2:/data
+
+  valkey-3:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    command: valkey-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-d3:/data
+
+  valkey-4:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    command: valkey-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-d4:/data
+
+  valkey-5:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    command: valkey-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-d5:/data
+
+  valkey-cluster-init:
+    image: valkey/valkey:9.0
+    env_file:
+      - .env
+    depends_on:
+      - valkey-0
+      - valkey-1
+      - valkey-2
+      - valkey-3
+      - valkey-4
+      - valkey-5
+    volumes:
+      - ./init-valkey.sh:/usr/local/bin/valkey-cluster-init.sh:ro
+    command: sh /usr/local/bin/valkey-cluster-init.sh
+
+  redis-ui:
+    image: redis/redisinsight
+    ports:
+      - "5540:5540"
+    depends_on:
+      - valkey-cluster-init
 
   controller-1:
     image: apache/kafka:latest
@@ -212,3 +287,16 @@ volumes:
       type: none
       device: /home/grivvus/docker_volumes/postgres/link-tracker
       o: bind
+
+  valkey-d0:
+    driver: local
+  valkey-d1:
+    driver: local
+  valkey-d2:
+    driver: local
+  valkey-d3:
+    driver: local
+  valkey-d4:
+    driver: local
+  valkey-d5:
+    driver: local
