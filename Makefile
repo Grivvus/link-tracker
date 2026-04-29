@@ -35,6 +35,10 @@ test-unit:
 test-integration:
 	@go test -race -tags=integrational -v ./internal/...
 
+.PHONE: load-test
+load-test:
+	@docker run --rm -i --network host --user "$$(id -u):$$(id -g)" -v "$$(pwd)":/scripts -w /scripts grafana/k6 run k6-test.js
+
 .PHONY: lint
 lint:
 	@echo "starting golangci-lint in docker"
