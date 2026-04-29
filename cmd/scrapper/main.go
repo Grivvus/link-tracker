@@ -28,6 +28,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/cache"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/helpserv"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/server"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/orm"
@@ -128,6 +129,7 @@ func newScrapperRuntime(
 	app.closeStorage = repos.close
 
 	baseScrapperPort := adapters.NewScrapperAdapter(logger, repos.chat, repos.subscription)
+
 	vkClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress: cfg.ValkeyClusterAddresse(),
 		Password:    cfg.ValkeyPassword,
@@ -238,12 +240,30 @@ func newScrapperHTTPServer(
 	cfg infrastructure.Config, logger *slog.Logger, scrapperPort ports.ScrapperPort,
 ) *http.Server {
 	var httpServInterface scrapperapi.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
+	helpServ, err := newScrapperHelpServer(cfg)
+	if err != nil {
+		logger.Warn("can't init help server")
+	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/helpers/seed-db", helpServ.SeedDBWithTestData)
+	mux.HandleFunc("/helpers/teardown-db", helpServ.TearDownDB)
 	handler := scrapperapi.HandlerFromMux(httpServInterface, mux)
 	return &http.Server{
 		Addr:    cfg.ServerURL,
 		Handler: handler,
 	}
+}
+
+func newScrapperHelpServer(cfg infrastructure.Config) (helpserv.HelpServ, error) {
+	poolcfg, err := pgxpool.ParseConfig(cfg.DBConnString)
+	if err != nil {
+		return helpserv.HelpServ{}, err
+	}
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolcfg)
+	if err != nil {
+		return helpserv.HelpServ{}, err
+	}
+	return helpserv.NewHelpServ(sql.NewDBSeeder(pool)), nil
 }
 
 func (app *scrapperRuntime) Run(ctx context.Context) error {
@@ -375,9 +395,16 @@ func initKafkaClient(cfg *infrastructure.Config, logger *slog.Logger) (ports.Bot
 		Logger:       kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
 		ErrorLogger:  kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
 	}
-	codec, err := avro.NewCodec(
-		cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
-	)
+	var codec *avro.Codec
+	for range 5 {
+		codec, err = avro.NewCodec(
+			cfg.SchemaRegistryURL, cfg.KafkaTopic, "/link_update.avsc",
+		)
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
 	if err != nil {
 		logger.Error("can't init avro codec", "err", err)
 		return nil, nil, err
