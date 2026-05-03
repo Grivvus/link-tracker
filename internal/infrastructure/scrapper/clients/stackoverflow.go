@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
 
@@ -21,10 +23,15 @@ type StackoverflowClient struct {
 	httpClient *http.Client
 }
 
-func NewStackoverflowClient(logger *slog.Logger) *StackoverflowClient {
+func NewStackoverflowClient(
+	logger *slog.Logger,
+	rcfg infrastructure.ReliabiltyConfig,
+) *StackoverflowClient {
 	return &StackoverflowClient{
-		logger:     logger,
-		httpClient: &http.Client{},
+		logger: logger,
+		httpClient: &http.Client{
+			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
+		},
 	}
 }
 

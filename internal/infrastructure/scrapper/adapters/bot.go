@@ -16,31 +16,35 @@ import (
 )
 
 type BotAdapter struct {
-	logger     *slog.Logger
-	client     bot.ClientInterface
-	grpcClient bp.BotClient
-	useGRPC    bool
+	logger      *slog.Logger
+	client      bot.ClientInterface
+	grpcClient  bp.BotClient
+	useGRPC     bool
+	callTimeout time.Duration
 }
 
 func NewBotAdapter(
 	logger *slog.Logger, client bot.ClientInterface,
-	grpcClient bp.BotClient, useGRPC bool,
+	grpcClient bp.BotClient, useGRPC bool, callTimeoutSecond int64,
 ) ports.BotPort {
 	return &BotAdapter{
-		logger:     logger,
-		client:     client,
-		grpcClient: grpcClient,
-		useGRPC:    useGRPC,
+		logger:      logger,
+		client:      client,
+		grpcClient:  grpcClient,
+		useGRPC:     useGRPC,
+		callTimeout: time.Duration(callTimeoutSecond) * time.Second,
 	}
 }
 
 func (b *BotAdapter) NotifyAboutUpdatedLinks(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
+	tctx, cancelFunc := context.WithTimeout(ctx, b.callTimeout)
+	defer cancelFunc()
 	if b.useGRPC {
-		return b.grpcNotify(ctx, event)
+		return b.grpcNotify(tctx, event)
 	}
-	return b.httpNotify(ctx, event)
+	return b.httpNotify(tctx, event)
 }
 
 func (b *BotAdapter) httpNotify(

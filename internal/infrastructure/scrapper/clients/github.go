@@ -9,6 +9,7 @@ import (
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
 )
 
@@ -21,10 +22,15 @@ type GitHubClient struct {
 	httpClient *http.Client
 }
 
-func NewGitHubClient(logger *slog.Logger) *GitHubClient {
+func NewGitHubClient(
+	logger *slog.Logger,
+	rcfg infrastructure.ReliabiltyConfig,
+) *GitHubClient {
 	return &GitHubClient{
-		logger:     logger,
-		httpClient: &http.Client{},
+		logger: logger,
+		httpClient: &http.Client{
+			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
+		},
 	}
 }
 

@@ -65,7 +65,12 @@ func run(logger *slog.Logger) (err error) {
 		return fmt.Errorf("can't load config: %w", err)
 	}
 
-	app, err := newBotRuntime(ctx, cfg, logger)
+	reliabiltyCfg, err := infrastructure.NewReliabilityConfig()
+	if err != nil {
+		return fmt.Errorf("can't load reliabilty config: %w", err)
+	}
+
+	app, err := newBotRuntime(ctx, cfg, reliabiltyCfg, logger)
 	if err != nil {
 		return err
 	}
@@ -79,7 +84,8 @@ func run(logger *slog.Logger) (err error) {
 }
 
 func newBotRuntime(
-	ctx context.Context, cfg infrastructure.Config, logger *slog.Logger,
+	ctx context.Context, cfg infrastructure.Config,
+	rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (app *botRuntime, err error) {
 	app = &botRuntime{
 		logger:     logger,
@@ -102,7 +108,7 @@ func newBotRuntime(
 		return nil, fmt.Errorf("can't start tcp listener: %w", err)
 	}
 
-	scrapperPort, grpcClient, err := newScrapperPort(cfg, logger)
+	scrapperPort, grpcClient, err := newScrapperPort(cfg, rcfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +139,8 @@ func newTCPListener(ctx context.Context, port int) (net.Listener, error) {
 }
 
 func newScrapperPort(
-	cfg infrastructure.Config, logger *slog.Logger,
+	cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig,
+	logger *slog.Logger,
 ) (ports.ScrapperPort, *grpc.ClientConn, error) {
 	grpcClient, err := grpc.NewClient(
 		fmt.Sprintf("%v:%v", cfg.ScrapperHost, cfg.ScrapperGRPCPort),
@@ -164,7 +171,10 @@ func newScrapperPort(
 		grpcScrapperClient = scrapperpb.NewScrapperClient(grpcClient)
 	}
 
-	return adapters.NewScrapperPort(logger, client, grpcScrapperClient, cfg.UseGRPC), grpcClient, nil
+	return adapters.NewScrapperPort(
+		logger, client, grpcScrapperClient,
+		cfg.UseGRPC, rcfg.ExternalServicesTimeoutSecond,
+	), grpcClient, nil
 }
 
 func newBotHTTPServer(

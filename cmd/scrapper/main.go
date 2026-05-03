@@ -79,7 +79,12 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("can't load config: %w", err)
 	}
 
-	app, err := newScrapperRuntime(ctx, cfg, logger)
+	reliabilityCfg, err := infrastructure.NewReliabilityConfig()
+	if err != nil {
+		return fmt.Errorf("can't load reliabilty config: %w", err)
+	}
+
+	app, err := newScrapperRuntime(ctx, cfg, reliabilityCfg, logger)
 	if err != nil {
 		return err
 	}
@@ -93,7 +98,7 @@ func run(logger *slog.Logger) error {
 }
 
 func newScrapperRuntime(
-	ctx context.Context, cfg infrastructure.Config, logger *slog.Logger,
+	ctx context.Context, cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (*scrapperRuntime, error) {
 	var err error
 	app := &scrapperRuntime{
@@ -115,7 +120,7 @@ func newScrapperRuntime(
 		return nil, fmt.Errorf("can't create tcp listener: %w", err)
 	}
 
-	botPort, grpcClient, kafkaWriter, err := newBotPort(cfg, logger)
+	botPort, grpcClient, kafkaWriter, err := newBotPort(cfg, rcfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +149,7 @@ func newScrapperRuntime(
 	app.httpServer = newScrapperHTTPServer(cfg, logger, scrapperPort)
 	pb.RegisterScrapperServer(app.grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
-	app.scheduler, err = newScheduler(ctx, cfg, logger, botPort, repos.outbox, repos.subscription)
+	app.scheduler, err = newScheduler(ctx, cfg, rcfg, logger, botPort, repos.outbox, repos.subscription)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +165,7 @@ func newTCPListener(ctx context.Context, port int) (net.Listener, error) {
 func newScheduler(
 	ctx context.Context,
 	cfg infrastructure.Config,
+	rcfg infrastructure.ReliabiltyConfig,
 	logger *slog.Logger,
 	botPort ports.BotPort,
 	notificationOutboxRepo repository.NotificationOutboxRepository,
@@ -167,8 +173,8 @@ func newScheduler(
 ) (gocron.Scheduler, error) {
 	linkStatePort := adapters.NewLinkStateAdapter(
 		logger,
-		clients.NewGitHubClient(logger),
-		clients.NewStackoverflowClient(logger),
+		clients.NewGitHubClient(logger, rcfg),
+		clients.NewStackoverflowClient(logger, rcfg),
 	)
 
 	sched, err := gocron.NewScheduler()
@@ -176,10 +182,11 @@ func newScheduler(
 		return nil, fmt.Errorf("can't init scheduler: %w", err)
 	}
 
+	const pendingLimit = 50
 	outbox := usecase.NewOutboxRelayUseCase(
 		logger, botPort,
 		notificationOutboxRepo,
-		sched, 50,
+		sched, pendingLimit,
 	)
 	if _, err := outbox.Start(ctx, 30*time.Second); err != nil {
 		return nil, errors.Join(fmt.Errorf("can't start outbox relay: %w", err), sched.Shutdown())
@@ -197,7 +204,8 @@ func newScheduler(
 }
 
 func newBotPort(
-	cfg infrastructure.Config, logger *slog.Logger,
+	cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig,
+	logger *slog.Logger,
 ) (ports.BotPort, *grpc.ClientConn, *kafka.Writer, error) {
 	if cfg.NotificationMethod == "kafka" {
 		botPort, kafkaWriter, err := initKafkaClient(&cfg, logger)
@@ -233,7 +241,9 @@ func newBotPort(
 		grpcBotClient = botpb.NewBotClient(grpcClient)
 	}
 
-	return adapters.NewBotAdapter(logger, client, grpcBotClient, cfg.UseGRPC), grpcClient, nil, nil
+	return adapters.NewBotAdapter(
+		logger, client, grpcBotClient, cfg.UseGRPC, rcfg.ExternalServicesTimeoutSecond,
+	), grpcClient, nil, nil
 }
 
 func newScrapperHTTPServer(

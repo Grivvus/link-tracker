@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -17,67 +18,79 @@ import (
 )
 
 type ScrapperAdapter struct {
-	log        *slog.Logger
-	client     scrapper.ClientInterface
-	grpcClient pb.ScrapperClient
-	useGRPC    bool
+	log         *slog.Logger
+	client      scrapper.ClientInterface
+	callTimeout time.Duration
+	grpcClient  pb.ScrapperClient
+	useGRPC     bool
 }
 
 func NewScrapperPort(
 	logger *slog.Logger, client scrapper.ClientInterface,
-	grpcClient pb.ScrapperClient, useGRPC bool,
+	grpcClient pb.ScrapperClient, useGRPC bool, callTimeoutSecond int64,
 ) ports.ScrapperPort {
 	return &ScrapperAdapter{
-		client:     client,
-		log:        logger,
-		grpcClient: grpcClient,
-		useGRPC:    useGRPC,
+		client:      client,
+		log:         logger,
+		grpcClient:  grpcClient,
+		useGRPC:     useGRPC,
+		callTimeout: time.Duration(callTimeoutSecond) * time.Second,
 	}
 }
 
 func (s *ScrapperAdapter) DeleteLink(
 	ctx context.Context, cmd model.UntrackLinkCmd,
 ) (model.TrackedLinkView, error) {
+	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
+	defer cancelFunc()
 	if s.useGRPC {
-		return s.grpcDeleteLink(ctx, cmd)
+		return s.grpcDeleteLink(tctx, cmd)
 	}
-	return s.httpDeleteLink(ctx, cmd)
+	return s.httpDeleteLink(tctx, cmd)
 }
 
 func (s *ScrapperAdapter) GetTrackedLinks(
 	ctx context.Context, query model.ListTrackedLinksQuery,
 ) ([]model.TrackedLinkView, error) {
+	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
+	defer cancelFunc()
 	if s.useGRPC {
-		return s.grpcGetTrackedLinks(ctx, query)
+		return s.grpcGetTrackedLinks(tctx, query)
 	}
-	return s.httpGetTrackedLinks(ctx, query)
+	return s.httpGetTrackedLinks(tctx, query)
 }
 
 func (s *ScrapperAdapter) AddLink(
 	ctx context.Context, cmd model.TrackLinkCmd,
 ) (model.TrackedLinkView, error) {
+	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
+	defer cancelFunc()
 	if s.useGRPC {
-		return s.grpcAddLink(ctx, cmd)
+		return s.grpcAddLink(tctx, cmd)
 	}
-	return s.httpAddLink(ctx, cmd)
+	return s.httpAddLink(tctx, cmd)
 }
 
 func (s *ScrapperAdapter) DeleteTGChat(
 	ctx context.Context, chatID int64,
 ) error {
+	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
+	defer cancelFunc()
 	if s.useGRPC {
-		return s.grpcDeleteTGChat(ctx, chatID)
+		return s.grpcDeleteTGChat(tctx, chatID)
 	}
-	return s.httpDeleteTGChat(ctx, chatID)
+	return s.httpDeleteTGChat(tctx, chatID)
 }
 
 func (s *ScrapperAdapter) RegisterTGChat(
 	ctx context.Context, chatID int64,
 ) error {
+	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
+	defer cancelFunc()
 	if s.useGRPC {
-		return s.grpcRegisterTGChat(ctx, chatID)
+		return s.grpcRegisterTGChat(tctx, chatID)
 	}
-	return s.httpRegisterTGChat(ctx, chatID)
+	return s.httpRegisterTGChat(tctx, chatID)
 }
 
 func (s *ScrapperAdapter) httpDeleteLink(

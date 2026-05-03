@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/clients"
 )
 
 type LinkPollingUseCase struct {
@@ -19,8 +19,6 @@ type LinkPollingUseCase struct {
 	logger                 *slog.Logger
 	linkState              ports.LinkStatePort
 	subscriptionRepository repository.SubscriptionRepository
-	ghClient               *clients.GitHubClient
-	stackoverflowClient    *clients.StackoverflowClient
 	pollerIntervalMinutes  int64
 }
 
@@ -35,8 +33,6 @@ func NewLinkPollingUseCase(
 		logger:                 logger,
 		linkState:              linkState,
 		subscriptionRepository: subscriptionRepo,
-		ghClient:               clients.NewGitHubClient(logger),
-		stackoverflowClient:    clients.NewStackoverflowClient(logger),
 		pollerIntervalMinutes:  pollerIntervalMinutes,
 	}
 }
@@ -87,12 +83,17 @@ func (poller *LinkPollingUseCase) linkWorkerFn(
 		updates, err := poller.linkState.Fetch(ctx, link)
 		if err != nil {
 			poller.logger.Warn("can't fetch link state", "err", err)
+			if errors.Is(err, context.DeadlineExceeded) {
+				// no need to notify
+				continue
+			}
 			poller.updateAndNotify(ctx, link, subsChatIDs, []model.LinkState{{
 				UpdatedBy:  "-",
 				UpdatedAt:  time.Now(),
 				Title:      "Could not fetch link state",
 				UpdateInfo: "Cause: " + err.Error(),
 			}})
+			continue
 		}
 		if updates == nil || len(updates) == 0 {
 			continue
