@@ -3,10 +3,12 @@ package adapters
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/avast/retry-go/v5"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	bp "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
@@ -21,11 +23,14 @@ type BotAdapter struct {
 	grpcClient  bp.BotClient
 	useGRPC     bool
 	callTimeout time.Duration
+	retrier     *retry.Retrier
 }
 
 func NewBotAdapter(
 	logger *slog.Logger, client bot.ClientInterface,
-	grpcClient bp.BotClient, useGRPC bool, callTimeoutSecond int64,
+	grpcClient bp.BotClient, useGRPC bool,
+	callTimeoutSecond int64,
+	retrier *retry.Retrier,
 ) ports.BotPort {
 	return &BotAdapter{
 		logger:      logger,
@@ -33,6 +38,7 @@ func NewBotAdapter(
 		grpcClient:  grpcClient,
 		useGRPC:     useGRPC,
 		callTimeout: time.Duration(callTimeoutSecond) * time.Second,
+		retrier:     retrier,
 	}
 }
 
@@ -59,24 +65,27 @@ func (b *BotAdapter) httpNotify(
 		UpdateAuthor: event.UpdateAuthor,
 		UpdatedAt:    event.UpdatedAt.Format(time.RFC3339),
 	}
-	resp, err := b.client.PostUpdates(ctx, body)
-	if err != nil {
-		b.logger.Error(
-			"can't make request NotifyAboutUpdatedLinks",
-			"err", err,
-		)
-		return errors.New("unexpected error")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= http.StatusBadRequest {
-		switch resp.StatusCode {
-		case http.StatusBadRequest:
-			return ports.ErrBadParams
-		default:
-			return errors.New("unexpected error")
-		}
-	}
-	return nil
+	return b.retrier.Do(
+		func() error {
+			resp, err := b.client.PostUpdates(ctx, body)
+			if err != nil {
+				b.logger.Error(
+					"can't make request NotifyAboutUpdatedLinks",
+					"err", err,
+				)
+				return fmt.Errorf("can't make a request, err: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode >= http.StatusBadRequest {
+				switch resp.StatusCode {
+				case http.StatusBadRequest:
+					return retry.Unrecoverable(ports.ErrBadParams)
+				default:
+					return errors.New("unexpected error")
+				}
+			}
+			return nil
+		})
 }
 
 func (b *BotAdapter) grpcNotify(
@@ -91,14 +100,17 @@ func (b *BotAdapter) grpcNotify(
 		Description:  event.Description,
 		TgChatIds:    event.ChatIDs,
 	})
-	if err != nil {
-		statusCode := status.Code(err)
-		switch statusCode {
-		case codes.InvalidArgument:
-			return ports.ErrBadParams
-		default:
-			return errors.New("unexpected error")
-		}
-	}
-	return nil
+	return b.retrier.Do(
+		func() error {
+			if err != nil {
+				statusCode := status.Code(err)
+				switch statusCode {
+				case codes.InvalidArgument:
+					return retry.Unrecoverable(ports.ErrBadParams)
+				default:
+					return errors.New("unexpected error")
+				}
+			}
+			return nil
+		})
 }
