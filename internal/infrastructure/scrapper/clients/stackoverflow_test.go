@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -155,4 +156,60 @@ func TestStackoverflowClient_FetchQuestion_Non2XXResponse(t *testing.T) {
 		},
 	)
 	require.ErrorIs(t, err, ports.ErrBadResponse)
+}
+
+func TestStackoverflowClient_FetchQuestion_Timeout(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 1), func(int) bool {
+		return false
+	})
+	client.httpClient.Timeout = 20 * time.Millisecond
+	client.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})
+
+	start := time.Now()
+	_, err := client.FetchQuestion(
+		context.Background(),
+		domain.StackoverflowURLInfo{
+			QuestionID: 123,
+		},
+	)
+
+	require.ErrorIs(t, err, ports.ErrBadResponse)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 500*time.Millisecond)
+}
+
+func TestStackoverflowClient_FetchQuestion_TimeoutRetriesAndEventuallySucceeds(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(2, 1), func(int) bool {
+		return false
+	})
+	client.httpClient.Timeout = 20 * time.Millisecond
+
+	attempts := 0
+	client.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		attempts++
+		if attempts == 1 {
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}
+		return newHTTPResponse(http.StatusOK, `{
+			"last_activity_date": 1710075600,
+			"link": "https://stackoverflow.com/questions/123",
+			"title": "Example question"
+		}`), nil
+	})
+
+	got, err := client.FetchQuestion(
+		context.Background(),
+		domain.StackoverflowURLInfo{
+			QuestionID: 123,
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, attempts)
+	require.Equal(t, "https://stackoverflow.com/questions/123", got.URL)
+	require.Equal(t, "Example question", got.Title)
 }
