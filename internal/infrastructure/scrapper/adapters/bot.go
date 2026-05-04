@@ -95,17 +95,17 @@ func (b *BotAdapter) httpNotify(
 func (b *BotAdapter) grpcNotify(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
-	_, err := b.grpcClient.NotifyAboutUpdate(ctx, &bp.LinkUpdate{
-		Id:           event.LinkID,
-		Url:          event.RawURL,
-		Title:        event.UpdateName,
-		UpdateAuthor: event.UpdateAuthor,
-		UpdatedAt:    event.UpdatedAt.Format(time.RFC3339),
-		Description:  event.Description,
-		TgChatIds:    event.ChatIDs,
-	})
 	return b.retrier.Do(
 		func() error {
+			_, err := b.grpcClient.NotifyAboutUpdate(ctx, &bp.LinkUpdate{
+				Id:           event.LinkID,
+				Url:          event.RawURL,
+				Title:        event.UpdateName,
+				UpdateAuthor: event.UpdateAuthor,
+				UpdatedAt:    event.UpdatedAt.Format(time.RFC3339),
+				Description:  event.Description,
+				TgChatIds:    event.ChatIDs,
+			})
 			if err != nil {
 				statusCode := status.Code(err)
 				switch statusCode {
