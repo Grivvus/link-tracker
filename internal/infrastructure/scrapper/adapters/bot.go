@@ -11,6 +11,7 @@ import (
 	"github.com/avast/retry-go/v5"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	bp "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	"google.golang.org/grpc/codes"
@@ -29,15 +30,18 @@ type BotAdapter struct {
 func NewBotAdapter(
 	logger *slog.Logger, client bot.ClientInterface,
 	grpcClient bp.BotClient, useGRPC bool,
-	callTimeoutSecond int64,
-	retrier *retry.Retrier,
+	rcfg infrastructure.ReliabiltyConfig,
 ) ports.BotPort {
+	retrier := retry.New(
+		retry.Attempts(uint(rcfg.RetryPolicy)),
+		retry.Delay(time.Duration(rcfg.RetryPolicyDelayMS)*time.Millisecond),
+	)
 	return &BotAdapter{
 		logger:      logger,
 		client:      client,
 		grpcClient:  grpcClient,
 		useGRPC:     useGRPC,
-		callTimeout: time.Duration(callTimeoutSecond) * time.Second,
+		callTimeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		retrier:     retrier,
 	}
 }

@@ -245,7 +245,7 @@ func newBotPort(
 	}
 
 	return adapters.NewBotAdapter(
-		logger, client, grpcBotClient, cfg.UseGRPC, rcfg.ExternalServicesTimeoutSecond,
+		logger, client, grpcBotClient, cfg.UseGRPC, rcfg,
 	), grpcClient, nil, nil
 }
 
