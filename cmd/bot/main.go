@@ -173,7 +173,7 @@ func newScrapperPort(
 
 	return adapters.NewScrapperPort(
 		logger, client, grpcScrapperClient,
-		cfg.UseGRPC, rcfg.ExternalServicesTimeoutSecond,
+		cfg.UseGRPC, rcfg,
 	), grpcClient, nil
 }
 
