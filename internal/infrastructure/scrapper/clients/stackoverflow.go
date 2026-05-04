@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/avast/retry-go/v5"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -19,19 +20,28 @@ const stackoverflowSite = "stackoverflow"
 const stackoverflowBodyFilter = "withbody"
 
 type StackoverflowClient struct {
-	logger     *slog.Logger
-	httpClient *http.Client
+	logger        *slog.Logger
+	httpClient    *http.Client
+	retrier       *retry.Retrier
+	shouldRetryFn func(statusCode int) bool
 }
 
 func NewStackoverflowClient(
 	logger *slog.Logger,
 	rcfg infrastructure.ReliabiltyConfig,
+	shouldRetryFn func(int) bool,
 ) *StackoverflowClient {
+	retrier := retry.New(
+		retry.Attempts(uint(rcfg.RetryPolicy)),
+		retry.Delay(time.Duration(rcfg.RetryPolicyDelayMS)*time.Millisecond),
+	)
 	return &StackoverflowClient{
 		logger: logger,
 		httpClient: &http.Client{
 			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		},
+		retrier:       retrier,
+		shouldRetryFn: shouldRetryFn,
 	}
 }
 
@@ -46,7 +56,9 @@ func (c *StackoverflowClient) FetchQuestion(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	question, err := doRequestAndMapResult[dto.StackoverflowQuestion](c.logger, c.httpClient, req)
+	question, err := doRequestAndMapResult[dto.StackoverflowQuestion](
+		c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
+	)
 	if err != nil {
 		return dto.StackoverflowQuestion{}, err
 	}
@@ -68,7 +80,9 @@ func (c *StackoverflowClient) FetchQuestionAnswers(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	answers, err := doRequestAndMapResult[dto.StackoverflowAnswers](c.logger, c.httpClient, req)
+	answers, err := doRequestAndMapResult[dto.StackoverflowAnswers](
+		c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +104,9 @@ func (c *StackoverflowClient) FetchQuestionComments(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	comments, err := doRequestAndMapResult[dto.StackoverflowComments](c.logger, c.httpClient, req)
+	comments, err := doRequestAndMapResult[dto.StackoverflowComments](
+		c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
+	)
 	if err != nil {
 		return nil, err
 	}

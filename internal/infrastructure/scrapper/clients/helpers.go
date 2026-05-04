@@ -1,11 +1,14 @@
 package clients
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 
+	"github.com/avast/retry-go/v5"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 )
 
@@ -13,9 +16,31 @@ type doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-func doRequestAndMapResult[T any](logger *slog.Logger, d doer, r *http.Request) (T, error) {
+func doRequestAndMapResult[T any](
+	logger *slog.Logger, d doer,
+	r *http.Request,
+	retrier *retry.Retrier, shouldRetry func(statusCode int) bool,
+) (T, error) {
 	var zero T
-	resp, err := d.Do(r)
+	var respData []byte
+	err := retrier.Do(func() error {
+		r, err := d.Do(r)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = r.Body.Close() }()
+		if r.StatusCode >= 400 {
+			if !shouldRetry(r.StatusCode) {
+				return retry.Unrecoverable(fmt.Errorf("unrecoverable status code: %v", r.StatusCode))
+			}
+			return fmt.Errorf("bad response, should retry; status code: %v", r.StatusCode)
+		}
+		respData, err = io.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		logger.Error(
 			"error executing request", "err", err,
@@ -24,17 +49,7 @@ func doRequestAndMapResult[T any](logger *slog.Logger, d doer, r *http.Request) 
 			"%w: exact error %w", ports.ErrBadResponse, err,
 		)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	logger.Info("got response", "code", resp.StatusCode)
-	if resp.StatusCode >= http.StatusBadRequest {
-		logger.Error(
-			"getting error-response",
-			"status_code", resp.StatusCode,
-		)
-		return zero, ports.ErrBadResponse
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&zero)
+	err = json.NewDecoder(bytes.NewReader(respData)).Decode(&zero)
 	if err != nil {
 		logger.Error(
 			"error decoding response",

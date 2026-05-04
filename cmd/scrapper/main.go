@@ -171,10 +171,13 @@ func newScheduler(
 	notificationOutboxRepo repository.NotificationOutboxRepository,
 	subscriptionRepo repository.SubscriptionRepository,
 ) (gocron.Scheduler, error) {
+	shouldRetryFn := func(statusCode int) bool {
+		return statusCode >= 500
+	}
 	linkStatePort := adapters.NewLinkStateAdapter(
 		logger,
-		clients.NewGitHubClient(logger, rcfg),
-		clients.NewStackoverflowClient(logger, rcfg),
+		clients.NewGitHubClient(logger, rcfg, shouldRetryFn),
+		clients.NewStackoverflowClient(logger, rcfg, shouldRetryFn),
 	)
 
 	sched, err := gocron.NewScheduler()

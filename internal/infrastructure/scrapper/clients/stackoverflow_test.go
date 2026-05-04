@@ -11,7 +11,9 @@ import (
 )
 
 func TestStackoverflowClient_FetchQuestion(t *testing.T) {
-	client := NewStackoverflowClient(testClientLogger())
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 100), func(i int) bool {
+		return false
+	})
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusOK, `{
@@ -35,7 +37,9 @@ func TestStackoverflowClient_FetchQuestion(t *testing.T) {
 }
 
 func TestStackoverflowClient_FetchQuestionComments_HappyPath(t *testing.T) {
-	client := NewStackoverflowClient(testClientLogger())
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 100), func(i int) bool {
+		return false
+	})
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusOK, `{
@@ -64,7 +68,9 @@ func TestStackoverflowClient_FetchQuestionComments_HappyPath(t *testing.T) {
 }
 
 func TestStackoverflowClient_FetchQuestionAnswers(t *testing.T) {
-	client := NewStackoverflowClient(testClientLogger())
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 100), func(i int) bool {
+		return false
+	})
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusOK, `{
@@ -95,7 +101,9 @@ func TestStackoverflowClient_FetchQuestionAnswers(t *testing.T) {
 }
 
 func TestStackoverflowClient_FetchQuestion_Non2xxResponse(t *testing.T) {
-	client := NewStackoverflowClient(testClientLogger())
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 100), func(i int) bool {
+		return false
+	})
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusInternalServerError, `{"error":"internal"}`), nil
@@ -112,7 +120,9 @@ func TestStackoverflowClient_FetchQuestion_Non2xxResponse(t *testing.T) {
 }
 
 func TestStackoverflowClient_FetchQuestion_InvalidJSON(t *testing.T) {
-	client := NewStackoverflowClient(testClientLogger())
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 100), func(i int) bool {
+		return false
+	})
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusOK, `{"last_activity_date":"oops"`), nil
@@ -129,7 +139,9 @@ func TestStackoverflowClient_FetchQuestion_InvalidJSON(t *testing.T) {
 }
 
 func TestStackoverflowClient_FetchQuestion_Non2XXResponse(t *testing.T) {
-	client := NewStackoverflowClient(testClientLogger())
+	client := NewStackoverflowClient(testClientLogger(), testRCFG(1, 100), func(i int) bool {
+		return false
+	})
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return newHTTPResponse(http.StatusInternalServerError, `{"message":"server is down}"`), nil

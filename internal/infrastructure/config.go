@@ -102,9 +102,10 @@ func LoadConfig() (Config, error) {
 
 type ReliabiltyConfig struct {
 	ExternalServicesTimeoutSecond int64 `envconfig:"EXTERNAL_SERVICES_TIMEOUT_SECOND" default:"5"`
-	RetryPolicy                   int   `envconfig:"RETRY_POLICY" default:"5"`
-	RateLimiterAllowCnt           int   `envocnfig:"RATE_LIMITER_ALLOW_CNT" default:"40"`
-	RateLimiterTimeIntervalSecond int64 `envconfig:"RATE_LIMITER_TIMEOUT_INTERVAL_SECOND" default:"5"`
+	RetryPolicy                   int   `envconfig:"RETRY_POLICY" default:"3"`
+	RetryPolicyDelayMS            int64 `envconfig:"RETRY_POLICY_DELAY_MS" default:"100"`
+	ReateLimiterMaxBurst          int   `envocnfig:"RATE_LIMITER_MAX_BURST" default:"40"`
+	RateLimiterRequestsPerSecond  int64 `envconfig:"RATE_LIMITER_REQUESTS_PER_SECOND" default:"10"`
 }
 
 func NewReliabilityConfig() (ReliabiltyConfig, error) {
@@ -119,11 +120,11 @@ func NewReliabilityConfig() (ReliabiltyConfig, error) {
 	if cfg.RetryPolicy <= 0 {
 		return cfg, fmt.Errorf("%w: RetryPolicy value must be a positive number", ErrInvalidEnv)
 	}
-	if cfg.RateLimiterAllowCnt <= 0 {
-		return cfg, fmt.Errorf("%w: RateLimiterAllowCnt value must be a positive number", ErrInvalidEnv)
+	if cfg.RateLimiterRequestsPerSecond <= 0 {
+		return cfg, fmt.Errorf("%w: RateLimiterRequestsPerSecond value must be a positive number", ErrInvalidEnv)
 	}
-	if cfg.RateLimiterTimeIntervalSecond <= 0 {
-		return cfg, fmt.Errorf("%w: ReateLimiterTimeIntervalSecond value must be a positive number", ErrInvalidEnv)
+	if cfg.ReateLimiterMaxBurst <= 0 {
+		return cfg, fmt.Errorf("%w: RateLimiterMaxBurst value must be a positive number", ErrInvalidEnv)
 	}
 	return cfg, nil
 }

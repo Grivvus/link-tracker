@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/avast/retry-go/v5"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -18,19 +19,28 @@ const githubAPIVersion = "2026-03-10"
 const baseQueryParameters = "sort=created&direction=desc&state=open"
 
 type GitHubClient struct {
-	logger     *slog.Logger
-	httpClient *http.Client
+	logger        *slog.Logger
+	httpClient    *http.Client
+	retrier       *retry.Retrier
+	shouldRetryFn func(statusCode int) bool
 }
 
 func NewGitHubClient(
 	logger *slog.Logger,
 	rcfg infrastructure.ReliabiltyConfig,
+	shouldRetryFn func(int) bool,
 ) *GitHubClient {
+	retrier := retry.New(
+		retry.Attempts(uint(rcfg.RetryPolicy)),
+		retry.Delay(time.Duration(rcfg.RetryPolicyDelayMS)*time.Millisecond),
+	)
 	return &GitHubClient{
 		logger: logger,
 		httpClient: &http.Client{
 			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		},
+		retrier:       retrier,
+		shouldRetryFn: shouldRetryFn,
 	}
 }
 
@@ -46,7 +56,9 @@ func (g *GitHubClient) FetchRepo(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return doRequestAndMapResult[dto.GithubRepository](g.logger, g.httpClient, req)
+	return doRequestAndMapResult[dto.GithubRepository](
+		g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
+	)
 }
 
 func (g *GitHubClient) FetchNewIssues(
@@ -62,7 +74,9 @@ func (g *GitHubClient) FetchNewIssues(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return doRequestAndMapResult[[]dto.Issue](g.logger, g.httpClient, req)
+	return doRequestAndMapResult[[]dto.Issue](
+		g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
+	)
 }
 
 func (g *GitHubClient) FetchPRs(
@@ -79,7 +93,9 @@ func (g *GitHubClient) FetchPRs(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return doRequestAndMapResult[[]dto.PullRequest](g.logger, g.httpClient, req)
+	return doRequestAndMapResult[[]dto.PullRequest](
+		g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
+	)
 }
 
 func buildGitHubURL(info domain.GitHubURLInfo) string {
