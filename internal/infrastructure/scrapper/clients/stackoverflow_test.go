@@ -240,6 +240,89 @@ func TestStackoverflowClient_FetchQuestion_CircuitBreakerOpensAndRejectsRequests
 	require.Equal(t, 1, requests)
 }
 
+func TestStackoverflowClient_FetchQuestion_CircuitBreakerClassifiesHTTPStatusCodes(t *testing.T) {
+	testCases := []struct {
+		name       string
+		statusCode int
+		wantOpen   bool
+	}{
+		{
+			name:       "bad request does not open breaker",
+			statusCode: http.StatusBadRequest,
+			wantOpen:   false,
+		},
+		{
+			name:       "not found does not open breaker",
+			statusCode: http.StatusNotFound,
+			wantOpen:   false,
+		},
+		{
+			name:       "too many requests does not open breaker",
+			statusCode: http.StatusTooManyRequests,
+			wantOpen:   false,
+		},
+		{
+			name:       "internal server error opens breaker",
+			statusCode: http.StatusInternalServerError,
+			wantOpen:   true,
+		},
+		{
+			name:       "bad gateway opens breaker",
+			statusCode: http.StatusBadGateway,
+			wantOpen:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewStackoverflowClient(testClientLogger(), testBreakerRCFG(), func(statusCode int) bool {
+				return statusCode >= http.StatusInternalServerError
+			})
+			requests := 0
+			client.httpClient.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				requests++
+				if requests == 1 {
+					return newHTTPResponse(tc.statusCode, `{"message":"request failed"}`), nil
+				}
+				return newHTTPResponse(http.StatusOK, `{
+					"last_activity_date": 1710075600,
+					"link": "https://stackoverflow.com/questions/123",
+					"title": "Example question"
+				}`), nil
+			})
+
+			_, err := client.FetchQuestion(
+				context.Background(),
+				domain.StackoverflowURLInfo{QuestionID: 123},
+			)
+			require.ErrorIs(t, err, ports.ErrBadResponse)
+
+			if tc.wantOpen {
+				require.Equal(t, gobreaker.StateOpen, client.breaker.State())
+
+				_, err = client.FetchQuestion(
+					context.Background(),
+					domain.StackoverflowURLInfo{QuestionID: 123},
+				)
+				require.ErrorIs(t, err, gobreaker.ErrOpenState)
+				require.Equal(t, 1, requests)
+				return
+			}
+
+			require.Equal(t, gobreaker.StateClosed, client.breaker.State())
+
+			got, err := client.FetchQuestion(
+				context.Background(),
+				domain.StackoverflowURLInfo{QuestionID: 123},
+			)
+			require.NoError(t, err)
+			require.Equal(t, "Example question", got.Title)
+			require.Equal(t, 2, requests)
+			require.Equal(t, gobreaker.StateClosed, client.breaker.State())
+		})
+	}
+}
+
 func TestStackoverflowClient_FetchQuestion_CircuitBreakerAllowsHalfOpenProbeAndClosesOnSuccess(t *testing.T) {
 	client := NewStackoverflowClient(testClientLogger(), testBreakerRCFG(), func(statusCode int) bool {
 		return statusCode >= http.StatusInternalServerError

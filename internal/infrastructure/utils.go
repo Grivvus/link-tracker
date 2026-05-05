@@ -32,7 +32,7 @@ func NewBreaker(
 			return failurePercentage >= float64(rcfg.BreakerFailureTreshold)
 		},
 		IsSuccessful: func(err error) bool {
-			return err == nil
+			return err == nil || IsSuccessfulFunc(err)
 		},
 		OnStateChange: func(name string, from, to gobreaker.State) {
 			logger.Warn("circuit breaker state changed", "name", name, "from", from, "to", to)

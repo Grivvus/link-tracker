@@ -175,6 +175,89 @@ func TestGitHubClient_FetchRepo_CircuitBreakerOpensAndRejectsRequests(t *testing
 	require.Equal(t, 1, requests)
 }
 
+func TestGitHubClient_FetchRepo_CircuitBreakerClassifiesHTTPStatusCodes(t *testing.T) {
+	testCases := []struct {
+		name       string
+		statusCode int
+		wantOpen   bool
+	}{
+		{
+			name:       "bad request does not open breaker",
+			statusCode: http.StatusBadRequest,
+			wantOpen:   false,
+		},
+		{
+			name:       "not found does not open breaker",
+			statusCode: http.StatusNotFound,
+			wantOpen:   false,
+		},
+		{
+			name:       "too many requests does not open breaker",
+			statusCode: http.StatusTooManyRequests,
+			wantOpen:   false,
+		},
+		{
+			name:       "internal server error opens breaker",
+			statusCode: http.StatusInternalServerError,
+			wantOpen:   true,
+		},
+		{
+			name:       "bad gateway opens breaker",
+			statusCode: http.StatusBadGateway,
+			wantOpen:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewGitHubClient(testClientLogger(), testBreakerRCFG(), func(statusCode int) bool {
+				return statusCode >= http.StatusInternalServerError
+			})
+			requests := 0
+			client.httpClient.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				requests++
+				if requests == 1 {
+					return newHTTPResponse(tc.statusCode, `{"message":"request failed"}`), nil
+				}
+				return newHTTPResponse(http.StatusOK, `{
+					"name":"repo",
+					"updated_at":"2026-05-04T00:00:00Z",
+					"html_url":"https://github.com/user/repo"
+				}`), nil
+			})
+
+			_, err := client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+				Username: "user",
+				RepoName: "repo",
+			})
+			require.ErrorIs(t, err, ports.ErrBadResponse)
+
+			if tc.wantOpen {
+				require.Equal(t, gobreaker.StateOpen, client.breaker.State())
+
+				_, err = client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+					Username: "user",
+					RepoName: "repo",
+				})
+				require.ErrorIs(t, err, gobreaker.ErrOpenState)
+				require.Equal(t, 1, requests)
+				return
+			}
+
+			require.Equal(t, gobreaker.StateClosed, client.breaker.State())
+
+			got, err := client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+				Username: "user",
+				RepoName: "repo",
+			})
+			require.NoError(t, err)
+			require.Equal(t, "repo", got.Name)
+			require.Equal(t, 2, requests)
+			require.Equal(t, gobreaker.StateClosed, client.breaker.State())
+		})
+	}
+}
+
 func TestGitHubClient_FetchRepo_CircuitBreakerAllowsHalfOpenProbeAndClosesOnSuccess(t *testing.T) {
 	rcfg := testBreakerRCFG()
 	rcfg.BreakerTimeoutSecond = 1
