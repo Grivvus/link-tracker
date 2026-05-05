@@ -101,11 +101,16 @@ func LoadConfig() (Config, error) {
 }
 
 type ReliabiltyConfig struct {
-	ExternalServicesTimeoutSecond int64 `envconfig:"EXTERNAL_SERVICES_TIMEOUT_SECOND" default:"5"`
-	RetryPolicy                   int   `envconfig:"RETRY_POLICY" default:"3"`
-	RetryPolicyDelayMS            int64 `envconfig:"RETRY_POLICY_DELAY_MS" default:"100"`
-	ReateLimiterMaxBurst          int   `envconfig:"RATE_LIMITER_MAX_BURST" default:"40"`
-	RateLimiterRequestsPerSecond  int   `envconfig:"RATE_LIMITER_REQUESTS_PER_SECOND" default:"10"`
+	ExternalServicesTimeoutSecond int64  `envconfig:"EXTERNAL_SERVICES_TIMEOUT_SECOND" default:"5"`
+	RetryPolicy                   int    `envconfig:"RETRY_POLICY" default:"3"`
+	RetryPolicyDelayMS            int64  `envconfig:"RETRY_POLICY_DELAY_MS" default:"100"`
+	ReateLimiterMaxBurst          int    `envconfig:"RATE_LIMITER_MAX_BURST" default:"40"`
+	RateLimiterRequestsPerSecond  int    `envconfig:"RATE_LIMITER_REQUESTS_PER_SECOND" default:"10"`
+	BreakerHalfopenMaxRequests    uint32 `envconfig:"BREAKER_HALFOPEN_MAX_REQUESTS" default:"3"`
+	BreakerTimeoutSecond          int    `envconfig:"BREAKER_TIMEOUT_SECOND" default:"30"`
+	BreakerBucketPeriodSecond     int    `envconfig:"BREAKER_BUCKER_PERIOD_SECOND" default:"5"`
+	BreakerIntervalSecond         int    `envconfig:"BREAKER_INTERVAL_SECOND" default:"15"`
+	BreakerFailureTreshold        int    `envconfig:"BREAKER_FAILURE_TRESHOLD" default:"50"`
 }
 
 func NewReliabilityConfig() (ReliabiltyConfig, error) {
@@ -125,6 +130,21 @@ func NewReliabilityConfig() (ReliabiltyConfig, error) {
 	}
 	if cfg.ReateLimiterMaxBurst <= 0 {
 		return cfg, fmt.Errorf("%w: RateLimiterMaxBurst value must be a positive number", ErrInvalidEnv)
+	}
+	if cfg.BreakerBucketPeriodSecond <= 0 {
+		return cfg, fmt.Errorf("%w: BreakerBucketPeriodSecond value must be a positive number", ErrInvalidEnv)
+	}
+	if cfg.BreakerHalfopenMaxRequests <= 0 {
+		return cfg, fmt.Errorf("%w: BreakerHalfopenMaxRequests value must be a positive number", ErrInvalidEnv)
+	}
+	if cfg.BreakerIntervalSecond <= 0 {
+		return cfg, fmt.Errorf("%w: BreakerIntervalSecond value must be a positive number", ErrInvalidEnv)
+	}
+	if cfg.BreakerTimeoutSecond <= 0 {
+		return cfg, fmt.Errorf("%w: BreakerTimeoutSecond value must be a positive number", ErrInvalidEnv)
+	}
+	if cfg.BreakerFailureTreshold <= 0 || cfg.BreakerFailureTreshold > 100 {
+		return cfg, fmt.Errorf("%w: BreakerFailureTreshold must be in (0, 100]", ErrInvalidEnv)
 	}
 	return cfg, nil
 }

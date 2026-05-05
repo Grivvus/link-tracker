@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sony/gobreaker/v2"
 	"github.com/stretchr/testify/require"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
@@ -35,8 +36,31 @@ func testClientLogger() *slog.Logger {
 
 func testRCFG(n int, delayMS int64) infrastructure.ReliabiltyConfig {
 	return infrastructure.ReliabiltyConfig{
-		RetryPolicy:        n,
-		RetryPolicyDelayMS: delayMS,
+		RetryPolicy:                   n,
+		RetryPolicyDelayMS:            delayMS,
+		BreakerHalfopenMaxRequests:    1,
+		BreakerTimeoutSecond:          1,
+		BreakerBucketPeriodSecond:     1,
+		BreakerIntervalSecond:         1,
+		BreakerFailureTreshold:        100,
+		ExternalServicesTimeoutSecond: 1,
+		RateLimiterRequestsPerSecond:  1,
+		ReateLimiterMaxBurst:          1,
+	}
+}
+
+func testBreakerRCFG() infrastructure.ReliabiltyConfig {
+	return infrastructure.ReliabiltyConfig{
+		RetryPolicy:                   1,
+		RetryPolicyDelayMS:            1,
+		ExternalServicesTimeoutSecond: 1,
+		BreakerHalfopenMaxRequests:    1,
+		BreakerTimeoutSecond:          1,
+		BreakerBucketPeriodSecond:     1,
+		BreakerIntervalSecond:         1,
+		BreakerFailureTreshold:        50,
+		RateLimiterRequestsPerSecond:  1,
+		ReateLimiterMaxBurst:          1,
 	}
 }
 
@@ -124,4 +148,67 @@ func TestGitHubClient_FetchRepo_TimeoutRetriesAndEventuallySucceeds(t *testing.T
 	require.Equal(t, 2, attempts)
 	require.Equal(t, "repo", got.Name)
 	require.Equal(t, "https://github.com/user/repo", got.URL)
+}
+
+func TestGitHubClient_FetchRepo_CircuitBreakerOpensAndRejectsRequests(t *testing.T) {
+	client := NewGitHubClient(testClientLogger(), testBreakerRCFG(), func(statusCode int) bool {
+		return statusCode >= http.StatusInternalServerError
+	})
+	requests := 0
+	client.httpClient.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		requests++
+		return newHTTPResponse(http.StatusInternalServerError, `{"message":"server error"}`), nil
+	})
+
+	_, err := client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+		Username: "user",
+		RepoName: "repo",
+	})
+	require.ErrorIs(t, err, ports.ErrBadResponse)
+	require.Equal(t, gobreaker.StateOpen, client.breaker.State())
+
+	_, err = client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+		Username: "user",
+		RepoName: "repo",
+	})
+	require.ErrorIs(t, err, gobreaker.ErrOpenState)
+	require.Equal(t, 1, requests)
+}
+
+func TestGitHubClient_FetchRepo_CircuitBreakerAllowsHalfOpenProbeAndClosesOnSuccess(t *testing.T) {
+	rcfg := testBreakerRCFG()
+	rcfg.BreakerTimeoutSecond = 1
+	client := NewGitHubClient(testClientLogger(), rcfg, func(statusCode int) bool {
+		return statusCode >= http.StatusInternalServerError
+	})
+	requests := 0
+	client.httpClient.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return newHTTPResponse(http.StatusInternalServerError, `{"message":"server error"}`), nil
+		}
+		return newHTTPResponse(http.StatusOK, `{
+			"name":"repo",
+			"updated_at":"2026-05-04T00:00:00Z",
+			"html_url":"https://github.com/user/repo"
+		}`), nil
+	})
+
+	_, err := client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+		Username: "user",
+		RepoName: "repo",
+	})
+	require.ErrorIs(t, err, ports.ErrBadResponse)
+	require.Equal(t, gobreaker.StateOpen, client.breaker.State())
+
+	time.Sleep(1100 * time.Millisecond)
+
+	got, err := client.FetchRepo(context.Background(), domain.GitHubURLInfo{
+		Username: "user",
+		RepoName: "repo",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "repo", got.Name)
+	require.Equal(t, 2, requests)
+	require.Equal(t, gobreaker.StateClosed, client.breaker.State())
 }

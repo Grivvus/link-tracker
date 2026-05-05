@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v5"
+	"github.com/sony/gobreaker/v2"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -23,6 +24,7 @@ type GitHubClient struct {
 	httpClient    *http.Client
 	retrier       *retry.Retrier
 	shouldRetryFn func(statusCode int) bool
+	breaker       *gobreaker.TwoStepCircuitBreaker[struct{}]
 }
 
 func NewGitHubClient(
@@ -40,6 +42,7 @@ func NewGitHubClient(
 			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		},
 		retrier:       retrier,
+		breaker:       newBreaker(logger, rcfg, "github-api"),
 		shouldRetryFn: shouldRetryFn,
 	}
 }
@@ -56,9 +59,11 @@ func (g *GitHubClient) FetchRepo(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return doRequestAndMapResult[dto.GithubRepository](
-		g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
-	)
+	return executeWithBreaker(g.breaker, func() (dto.GithubRepository, error) {
+		return doRequestAndMapResult[dto.GithubRepository](
+			g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
+		)
+	})
 }
 
 func (g *GitHubClient) FetchNewIssues(
@@ -74,9 +79,11 @@ func (g *GitHubClient) FetchNewIssues(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return doRequestAndMapResult[[]dto.Issue](
-		g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
-	)
+	return executeWithBreaker(g.breaker, func() ([]dto.Issue, error) {
+		return doRequestAndMapResult[[]dto.Issue](
+			g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
+		)
+	})
 }
 
 func (g *GitHubClient) FetchPRs(
@@ -93,9 +100,11 @@ func (g *GitHubClient) FetchPRs(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return doRequestAndMapResult[[]dto.PullRequest](
-		g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
-	)
+	return executeWithBreaker(g.breaker, func() ([]dto.PullRequest, error) {
+		return doRequestAndMapResult[[]dto.PullRequest](
+			g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
+		)
+	})
 }
 
 func buildGitHubURL(info domain.GitHubURLInfo) string {

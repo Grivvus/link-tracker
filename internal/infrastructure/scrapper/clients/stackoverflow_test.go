@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sony/gobreaker/v2"
 	"github.com/stretchr/testify/require"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
@@ -212,4 +213,65 @@ func TestStackoverflowClient_FetchQuestion_TimeoutRetriesAndEventuallySucceeds(t
 	require.Equal(t, 2, attempts)
 	require.Equal(t, "https://stackoverflow.com/questions/123", got.URL)
 	require.Equal(t, "Example question", got.Title)
+}
+
+func TestStackoverflowClient_FetchQuestion_CircuitBreakerOpensAndRejectsRequests(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger(), testBreakerRCFG(), func(statusCode int) bool {
+		return statusCode >= http.StatusInternalServerError
+	})
+	requests := 0
+	client.httpClient.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		requests++
+		return newHTTPResponse(http.StatusInternalServerError, `{"message":"server error"}`), nil
+	})
+
+	_, err := client.FetchQuestion(
+		context.Background(),
+		domain.StackoverflowURLInfo{QuestionID: 123},
+	)
+	require.ErrorIs(t, err, ports.ErrBadResponse)
+	require.Equal(t, gobreaker.StateOpen, client.breaker.State())
+
+	_, err = client.FetchQuestion(
+		context.Background(),
+		domain.StackoverflowURLInfo{QuestionID: 123},
+	)
+	require.ErrorIs(t, err, gobreaker.ErrOpenState)
+	require.Equal(t, 1, requests)
+}
+
+func TestStackoverflowClient_FetchQuestion_CircuitBreakerAllowsHalfOpenProbeAndClosesOnSuccess(t *testing.T) {
+	client := NewStackoverflowClient(testClientLogger(), testBreakerRCFG(), func(statusCode int) bool {
+		return statusCode >= http.StatusInternalServerError
+	})
+	requests := 0
+	client.httpClient.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return newHTTPResponse(http.StatusInternalServerError, `{"message":"server error"}`), nil
+		}
+		return newHTTPResponse(http.StatusOK, `{
+			"last_activity_date": 1710075600,
+			"link": "https://stackoverflow.com/questions/123",
+			"title": "Example question"
+		}`), nil
+	})
+
+	_, err := client.FetchQuestion(
+		context.Background(),
+		domain.StackoverflowURLInfo{QuestionID: 123},
+	)
+	require.ErrorIs(t, err, ports.ErrBadResponse)
+	require.Equal(t, gobreaker.StateOpen, client.breaker.State())
+
+	time.Sleep(1100 * time.Millisecond)
+
+	got, err := client.FetchQuestion(
+		context.Background(),
+		domain.StackoverflowURLInfo{QuestionID: 123},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "Example question", got.Title)
+	require.Equal(t, 2, requests)
+	require.Equal(t, gobreaker.StateClosed, client.breaker.State())
 }

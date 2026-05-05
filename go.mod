@@ -17,9 +17,11 @@ require (
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/riferrei/srclient v0.7.4
 	github.com/segmentio/kafka-go v0.4.50
+	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.41.0
 	github.com/valkey-io/valkey-go v1.0.74
+	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
 )
@@ -161,7 +163,6 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260319171110-e3a33c96fb44 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260311181403-84a4fc48630c // indirect

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v5"
+	"github.com/sony/gobreaker/v2"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -23,6 +24,7 @@ type StackoverflowClient struct {
 	logger        *slog.Logger
 	httpClient    *http.Client
 	retrier       *retry.Retrier
+	breaker       *gobreaker.TwoStepCircuitBreaker[struct{}]
 	shouldRetryFn func(statusCode int) bool
 }
 
@@ -41,6 +43,7 @@ func NewStackoverflowClient(
 			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		},
 		retrier:       retrier,
+		breaker:       newBreaker(logger, rcfg, "stackoverflow-api"),
 		shouldRetryFn: shouldRetryFn,
 	}
 }
@@ -56,13 +59,11 @@ func (c *StackoverflowClient) FetchQuestion(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	question, err := doRequestAndMapResult[dto.StackoverflowQuestion](
-		c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
-	)
-	if err != nil {
-		return dto.StackoverflowQuestion{}, err
-	}
-	return question, nil
+	return executeWithBreaker(c.breaker, func() (dto.StackoverflowQuestion, error) {
+		return doRequestAndMapResult[dto.StackoverflowQuestion](
+			c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
+		)
+	})
 }
 
 func (c *StackoverflowClient) FetchQuestionAnswers(
@@ -80,13 +81,15 @@ func (c *StackoverflowClient) FetchQuestionAnswers(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	answers, err := doRequestAndMapResult[dto.StackoverflowAnswers](
-		c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return answers.Items, nil
+	return executeWithBreaker(c.breaker, func() ([]dto.StackoverflowAnswer, error) {
+		answers, err := doRequestAndMapResult[dto.StackoverflowAnswers](
+			c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return answers.Items, nil
+	})
 }
 
 func (c *StackoverflowClient) FetchQuestionComments(
@@ -104,13 +107,15 @@ func (c *StackoverflowClient) FetchQuestionComments(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	comments, err := doRequestAndMapResult[dto.StackoverflowComments](
-		c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return comments.Items, nil
+	return executeWithBreaker(c.breaker, func() ([]dto.StackoverflowComment, error) {
+		comments, err := doRequestAndMapResult[dto.StackoverflowComments](
+			c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return comments.Items, nil
+	})
 }
 
 func buildStackoverflowQuestionURL(info domain.StackoverflowURLInfo) string {
