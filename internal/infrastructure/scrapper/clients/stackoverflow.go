@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -42,8 +43,14 @@ func NewStackoverflowClient(
 		httpClient: &http.Client{
 			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		},
-		retrier:       retrier,
-		breaker:       newBreaker(logger, rcfg, "stackoverflow-api"),
+		retrier: retrier,
+		breaker: infrastructure.NewBreaker(
+			logger, rcfg, "stackoverflow-api",
+			func(err error) bool {
+				httpErr, ok := errors.AsType[HTTPError](err)
+				return !ok || httpErr.Code < 500
+			},
+		),
 		shouldRetryFn: shouldRetryFn,
 	}
 }
@@ -59,7 +66,7 @@ func (c *StackoverflowClient) FetchQuestion(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	return executeWithBreaker(c.breaker, func() (dto.StackoverflowQuestion, error) {
+	return infrastructure.ExecuteWithBreaker(c.breaker, func() (dto.StackoverflowQuestion, error) {
 		return doRequestAndMapResult[dto.StackoverflowQuestion](
 			c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
 		)
@@ -81,7 +88,7 @@ func (c *StackoverflowClient) FetchQuestionAnswers(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	return executeWithBreaker(c.breaker, func() ([]dto.StackoverflowAnswer, error) {
+	return infrastructure.ExecuteWithBreaker(c.breaker, func() ([]dto.StackoverflowAnswer, error) {
 		answers, err := doRequestAndMapResult[dto.StackoverflowAnswers](
 			c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
 		)
@@ -107,7 +114,7 @@ func (c *StackoverflowClient) FetchQuestionComments(
 		)
 	}
 	c.logger.Info("request was built", "url", req.URL.String())
-	return executeWithBreaker(c.breaker, func() ([]dto.StackoverflowComment, error) {
+	return infrastructure.ExecuteWithBreaker(c.breaker, func() ([]dto.StackoverflowComment, error) {
 		comments, err := doRequestAndMapResult[dto.StackoverflowComments](
 			c.logger, c.httpClient, req, c.retrier, c.shouldRetryFn,
 		)

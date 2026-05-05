@@ -7,13 +7,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/avast/retry-go/v5"
-	"github.com/sony/gobreaker/v2"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 )
+
+type HTTPError struct {
+	Code int
+	Err  error
+}
+
+func (err HTTPError) Error() string {
+	return err.Err.Error()
+}
 
 type doer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -34,9 +40,15 @@ func doRequestAndMapResult[T any](
 		defer func() { _ = r.Body.Close() }()
 		if r.StatusCode >= 400 {
 			if !shouldRetry(r.StatusCode) {
-				return retry.Unrecoverable(fmt.Errorf("unrecoverable status code: %v", r.StatusCode))
+				return retry.Unrecoverable(HTTPError{
+					Code: r.StatusCode,
+					Err:  fmt.Errorf("unrecoverable status code: %v", r.StatusCode),
+				})
 			}
-			return fmt.Errorf("bad response, should retry; status code: %v", r.StatusCode)
+			return HTTPError{
+				Code: r.StatusCode,
+				Err:  fmt.Errorf("bad response, should retry; status code: %v", r.StatusCode),
+			}
 		}
 		respData, err = io.ReadAll(r.Body)
 		if err != nil {
@@ -63,44 +75,4 @@ func doRequestAndMapResult[T any](
 		)
 	}
 	return zero, nil
-}
-
-func executeWithBreaker[T any](
-	cb *gobreaker.TwoStepCircuitBreaker[struct{}],
-	op func() (T, error),
-) (T, error) {
-	done, err := cb.Allow()
-	if err != nil {
-		var zero T
-		return zero, err
-	}
-
-	result, err := op()
-	done(err)
-
-	return result, err
-}
-
-func newBreaker(logger *slog.Logger, rcfg infrastructure.ReliabiltyConfig, breakerName string) *gobreaker.TwoStepCircuitBreaker[struct{}] {
-	breaker := gobreaker.NewTwoStepCircuitBreaker[struct{}](gobreaker.Settings{
-		Name:         breakerName,
-		MaxRequests:  rcfg.BreakerHalfopenMaxRequests,
-		Interval:     time.Duration(rcfg.BreakerIntervalSecond) * time.Second,
-		Timeout:      time.Duration(rcfg.BreakerTimeoutSecond) * time.Second,
-		BucketPeriod: time.Duration(rcfg.BreakerBucketPeriodSecond) * time.Second,
-		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			if counts.Requests == 0 {
-				return false
-			}
-			failurePercentage := float64(counts.TotalFailures) / float64(counts.Requests) * 100
-			return failurePercentage >= float64(rcfg.BreakerFailureTreshold)
-		},
-		IsSuccessful: func(err error) bool {
-			return err == nil
-		},
-		OnStateChange: func(name string, from, to gobreaker.State) {
-			logger.Warn("circuit breaker state changed", "name", name, "from", from, "to", to)
-		},
-	})
-	return breaker
 }

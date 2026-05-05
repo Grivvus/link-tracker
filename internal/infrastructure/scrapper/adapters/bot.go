@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v5"
+	"github.com/sony/gobreaker/v2"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -25,6 +26,7 @@ type BotAdapter struct {
 	useGRPC     bool
 	callTimeout time.Duration
 	retrier     *retry.Retrier
+	breaker     *gobreaker.TwoStepCircuitBreaker[struct{}]
 }
 
 func NewBotAdapter(
@@ -36,6 +38,9 @@ func NewBotAdapter(
 		retry.Attempts(uint(rcfg.RetryPolicy)),
 		retry.Delay(time.Duration(rcfg.RetryPolicyDelayMS)*time.Millisecond),
 	)
+	breaker := infrastructure.NewBreaker(logger, rcfg, "bot-client", func(err error) bool {
+		return errors.Is(err, ports.ErrBadParams)
+	})
 	return &BotAdapter{
 		logger:      logger,
 		client:      client,
@@ -43,6 +48,7 @@ func NewBotAdapter(
 		useGRPC:     useGRPC,
 		callTimeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		retrier:     retrier,
+		breaker:     breaker,
 	}
 }
 
@@ -51,10 +57,13 @@ func (b *BotAdapter) NotifyAboutUpdatedLinks(
 ) error {
 	tctx, cancelFunc := context.WithTimeout(ctx, b.callTimeout)
 	defer cancelFunc()
-	if b.useGRPC {
-		return b.grpcNotify(tctx, event)
-	}
-	return b.httpNotify(tctx, event)
+	_, err := infrastructure.ExecuteWithBreaker(b.breaker, func() (int, error) {
+		if b.useGRPC {
+			return 0, b.grpcNotify(tctx, event)
+		}
+		return 0, b.httpNotify(tctx, event)
+	})
+	return err
 }
 
 func (b *BotAdapter) httpNotify(

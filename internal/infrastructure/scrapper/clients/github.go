@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -41,8 +42,14 @@ func NewGitHubClient(
 		httpClient: &http.Client{
 			Timeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
 		},
-		retrier:       retrier,
-		breaker:       newBreaker(logger, rcfg, "github-api"),
+		retrier: retrier,
+		breaker: infrastructure.NewBreaker(
+			logger, rcfg, "github-api",
+			func(err error) bool {
+				httpErr, ok := errors.AsType[HTTPError](err)
+				return !ok || httpErr.Code < 500
+			},
+		),
 		shouldRetryFn: shouldRetryFn,
 	}
 }
@@ -59,7 +66,7 @@ func (g *GitHubClient) FetchRepo(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return executeWithBreaker(g.breaker, func() (dto.GithubRepository, error) {
+	return infrastructure.ExecuteWithBreaker(g.breaker, func() (dto.GithubRepository, error) {
 		return doRequestAndMapResult[dto.GithubRepository](
 			g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
 		)
@@ -79,7 +86,7 @@ func (g *GitHubClient) FetchNewIssues(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return executeWithBreaker(g.breaker, func() ([]dto.Issue, error) {
+	return infrastructure.ExecuteWithBreaker(g.breaker, func() ([]dto.Issue, error) {
 		return doRequestAndMapResult[[]dto.Issue](
 			g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
 		)
@@ -100,7 +107,7 @@ func (g *GitHubClient) FetchPRs(
 	}
 	req.Header.Add("Accept", "application/vnd.github+json")
 	req.Header.Add("X-GitHub-Api-Version", githubAPIVersion)
-	return executeWithBreaker(g.breaker, func() ([]dto.PullRequest, error) {
+	return infrastructure.ExecuteWithBreaker(g.breaker, func() ([]dto.PullRequest, error) {
 		return doRequestAndMapResult[[]dto.PullRequest](
 			g.logger, g.httpClient, req, g.retrier, g.shouldRetryFn,
 		)

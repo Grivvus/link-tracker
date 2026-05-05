@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v5"
+	"github.com/sony/gobreaker/v2"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -28,6 +29,7 @@ type ScrapperAdapter struct {
 	grpcClient  pb.ScrapperClient
 	useGRPC     bool
 	retrier     *retry.Retrier
+	breaker     *gobreaker.TwoStepCircuitBreaker[struct{}]
 }
 
 func NewScrapperPort(
@@ -39,12 +41,25 @@ func NewScrapperPort(
 		retry.Attempts(uint(rcfg.RetryPolicy)),
 		retry.Delay(time.Duration(rcfg.RetryPolicyDelayMS)*time.Millisecond),
 	)
+	breaker := infrastructure.NewBreaker(
+		logger, rcfg, "scrapper-client",
+		func(err error) bool {
+			bp := errors.Is(err, ports.ErrBadParams)
+			bu := errors.Is(err, ports.ErrBadURL)
+			conflictLink := errors.Is(err, ports.ErrLinkAlreadyTracked)
+			conflictChat := errors.Is(err, ports.ErrChatAlreadyExist)
+			nl := errors.Is(err, ports.ErrNoLink)
+			nc := errors.Is(err, ports.ErrNoChatWithThisID)
+			return bp || bu || conflictLink || conflictChat || nl || nc
+		},
+	)
 	return &ScrapperAdapter{
 		client:      client,
 		log:         logger,
 		grpcClient:  grpcClient,
 		useGRPC:     useGRPC,
 		callTimeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
+		breaker:     breaker,
 		retrier:     retrier,
 	}
 }
@@ -54,10 +69,13 @@ func (s *ScrapperAdapter) DeleteLink(
 ) (model.TrackedLinkView, error) {
 	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
 	defer cancelFunc()
-	if s.useGRPC {
-		return s.grpcDeleteLink(tctx, cmd)
-	}
-	return s.httpDeleteLink(tctx, cmd)
+
+	return infrastructure.ExecuteWithBreaker(s.breaker, func() (model.TrackedLinkView, error) {
+		if s.useGRPC {
+			return s.grpcDeleteLink(tctx, cmd)
+		}
+		return s.httpDeleteLink(tctx, cmd)
+	})
 }
 
 func (s *ScrapperAdapter) GetTrackedLinks(
@@ -65,10 +83,12 @@ func (s *ScrapperAdapter) GetTrackedLinks(
 ) ([]model.TrackedLinkView, error) {
 	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
 	defer cancelFunc()
-	if s.useGRPC {
-		return s.grpcGetTrackedLinks(tctx, query)
-	}
-	return s.httpGetTrackedLinks(tctx, query)
+	return infrastructure.ExecuteWithBreaker(s.breaker, func() ([]model.TrackedLinkView, error) {
+		if s.useGRPC {
+			return s.grpcGetTrackedLinks(tctx, query)
+		}
+		return s.httpGetTrackedLinks(tctx, query)
+	})
 }
 
 func (s *ScrapperAdapter) AddLink(
@@ -76,10 +96,12 @@ func (s *ScrapperAdapter) AddLink(
 ) (model.TrackedLinkView, error) {
 	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
 	defer cancelFunc()
-	if s.useGRPC {
-		return s.grpcAddLink(tctx, cmd)
-	}
-	return s.httpAddLink(tctx, cmd)
+	return infrastructure.ExecuteWithBreaker(s.breaker, func() (model.TrackedLinkView, error) {
+		if s.useGRPC {
+			return s.grpcAddLink(tctx, cmd)
+		}
+		return s.httpAddLink(tctx, cmd)
+	})
 }
 
 func (s *ScrapperAdapter) DeleteTGChat(
@@ -87,10 +109,13 @@ func (s *ScrapperAdapter) DeleteTGChat(
 ) error {
 	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
 	defer cancelFunc()
-	if s.useGRPC {
-		return s.grpcDeleteTGChat(tctx, chatID)
-	}
-	return s.httpDeleteTGChat(tctx, chatID)
+	_, err := infrastructure.ExecuteWithBreaker(s.breaker, func() (int, error) {
+		if s.useGRPC {
+			return 0, s.grpcDeleteTGChat(tctx, chatID)
+		}
+		return 0, s.httpDeleteTGChat(tctx, chatID)
+	})
+	return err
 }
 
 func (s *ScrapperAdapter) RegisterTGChat(
@@ -98,10 +123,13 @@ func (s *ScrapperAdapter) RegisterTGChat(
 ) error {
 	tctx, cancelFunc := context.WithTimeout(ctx, s.callTimeout)
 	defer cancelFunc()
-	if s.useGRPC {
-		return s.grpcRegisterTGChat(tctx, chatID)
-	}
-	return s.httpRegisterTGChat(tctx, chatID)
+	_, err := infrastructure.ExecuteWithBreaker(s.breaker, func() (int, error) {
+		if s.useGRPC {
+			return 0, s.grpcRegisterTGChat(tctx, chatID)
+		}
+		return 0, s.httpRegisterTGChat(tctx, chatID)
+	})
+	return err
 }
 
 func (s *ScrapperAdapter) httpDeleteLink(
