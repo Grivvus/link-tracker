@@ -23,6 +23,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	botpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/httputils"
 	botapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
@@ -101,10 +102,14 @@ func newScrapperRuntime(
 	ctx context.Context, cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (*scrapperRuntime, error) {
 	var err error
+	limiter := httputils.NewRateLimiter(rcfg.RateLimiterRequestsPerSecond, rcfg.ReateLimiterMaxBurst)
 	app := &scrapperRuntime{
-		logger:     logger,
-		grpcPort:   cfg.ScrapperGRPCPort,
-		grpcServer: grpc.NewServer(),
+		logger:   logger,
+		grpcPort: cfg.ScrapperGRPCPort,
+		grpcServer: grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				limiter.UnaryServerInterceptor(),
+			)),
 	}
 	defer func() {
 		if err == nil {
@@ -146,7 +151,7 @@ func newScrapperRuntime(
 	linksCache := cache.NewValkeyLinksCache(logger, vkClient, time.Duration(cfg.ValkeyTTLSeconds)*time.Second)
 	scrapperPort := adapters.NewScrapperCachedAdapter(logger, baseScrapperPort, linksCache)
 
-	app.httpServer = newScrapperHTTPServer(cfg, logger, scrapperPort)
+	app.httpServer = newScrapperHTTPServer(cfg, limiter, logger, scrapperPort)
 	pb.RegisterScrapperServer(app.grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
 	app.scheduler, err = newScheduler(ctx, cfg, rcfg, logger, botPort, repos.outbox, repos.subscription)
@@ -250,20 +255,26 @@ func newBotPort(
 }
 
 func newScrapperHTTPServer(
-	cfg infrastructure.Config, logger *slog.Logger, scrapperPort ports.ScrapperPort,
+	cfg infrastructure.Config, limiter *httputils.RateLimiter,
+	logger *slog.Logger, scrapperPort ports.ScrapperPort,
 ) *http.Server {
 	var httpServInterface scrapperapi.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
+	mux := http.NewServeMux()
+
 	helpServ, err := newScrapperHelpServer(cfg)
 	if err != nil {
 		logger.Warn("can't init help server")
+	} else {
+		mux.HandleFunc("/helpers/seed-db", helpServ.SeedDBWithTestData)
+		mux.HandleFunc("/helpers/teardown-db", helpServ.TearDownDB)
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/helpers/seed-db", helpServ.SeedDBWithTestData)
-	mux.HandleFunc("/helpers/teardown-db", helpServ.TearDownDB)
+
 	handler := scrapperapi.HandlerFromMux(httpServInterface, mux)
+	limitedHandler := limiter.Middleware(handler)
+
 	return &http.Server{
 		Addr:    cfg.ServerURL,
-		Handler: handler,
+		Handler: limitedHandler,
 	}
 }
 

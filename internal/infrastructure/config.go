@@ -104,8 +104,8 @@ type ReliabiltyConfig struct {
 	ExternalServicesTimeoutSecond int64 `envconfig:"EXTERNAL_SERVICES_TIMEOUT_SECOND" default:"5"`
 	RetryPolicy                   int   `envconfig:"RETRY_POLICY" default:"3"`
 	RetryPolicyDelayMS            int64 `envconfig:"RETRY_POLICY_DELAY_MS" default:"100"`
-	ReateLimiterMaxBurst          int   `envocnfig:"RATE_LIMITER_MAX_BURST" default:"40"`
-	RateLimiterRequestsPerSecond  int64 `envconfig:"RATE_LIMITER_REQUESTS_PER_SECOND" default:"10"`
+	ReateLimiterMaxBurst          int   `envconfig:"RATE_LIMITER_MAX_BURST" default:"40"`
+	RateLimiterRequestsPerSecond  int   `envconfig:"RATE_LIMITER_REQUESTS_PER_SECOND" default:"10"`
 }
 
 func NewReliabilityConfig() (ReliabiltyConfig, error) {

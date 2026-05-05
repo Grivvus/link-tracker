@@ -22,6 +22,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/server"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	scrapperpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/httputils"
 	oapibot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"google.golang.org/grpc"
@@ -87,10 +88,14 @@ func newBotRuntime(
 	ctx context.Context, cfg infrastructure.Config,
 	rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (app *botRuntime, err error) {
+	limiter := httputils.NewRateLimiter(rcfg.RateLimiterRequestsPerSecond, rcfg.ReateLimiterMaxBurst)
 	app = &botRuntime{
-		logger:     logger,
-		grpcPort:   cfg.BotGRPCPort,
-		grpcServer: grpc.NewServer(),
+		logger:   logger,
+		grpcPort: cfg.BotGRPCPort,
+		grpcServer: grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				limiter.UnaryServerInterceptor(),
+			)),
 	}
 	defer func() {
 		if err == nil {
@@ -120,7 +125,7 @@ func newBotRuntime(
 	}
 
 	botPort := adapters.NewBotPort(app.botApp.Bot, logger)
-	app.httpServer = newBotHTTPServer(cfg, logger, botPort)
+	app.httpServer = newBotHTTPServer(cfg, limiter, logger, botPort)
 	pb.RegisterBotServer(app.grpcServer, server.NewBotGRPCServer(logger, botPort))
 
 	if cfg.NotificationMethod == "kafka" {
@@ -178,14 +183,18 @@ func newScrapperPort(
 }
 
 func newBotHTTPServer(
-	cfg infrastructure.Config, logger *slog.Logger, botPort ports.BotPort,
+	cfg infrastructure.Config, limiter *httputils.RateLimiter,
+	logger *slog.Logger, botPort ports.BotPort,
 ) *http.Server {
 	var serv oapibot.ServerInterface = server.New(logger, botPort)
 	mux := http.NewServeMux()
 	handler := oapibot.HandlerFromMux(serv, mux)
+
+	limitedHandler := limiter.Middleware(handler)
+
 	return &http.Server{
 		Addr:    cfg.ServerURL,
-		Handler: handler,
+		Handler: limitedHandler,
 	}
 }
 
