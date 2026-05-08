@@ -119,7 +119,7 @@ func newBotRuntime(
 	}
 	app.grpcClient = grpcClient
 
-	app.botApp, err = botapp.New(ctx, cfg, logger, scrapperPort)
+	app.botApp, err = botapp.New(ctx, cfg, logger, scrapperPort, rcfg)
 	if err != nil {
 		return nil, fmt.Errorf("can't start bot: %w", err)
 	}

@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/avast/retry-go/v5"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/go-telegram/fsm"
@@ -64,12 +66,18 @@ type BotApplication struct {
 	dialogStorage repository.DialogDraftsRepository
 	logger        *slog.Logger
 	scrapperPort  ports.ScrapperPort
+	retrier       *retry.Retrier
 }
 
 func New(
 	ctx context.Context, cfg infrastructure.Config,
 	logger *slog.Logger, sp ports.ScrapperPort,
+	rcfg infrastructure.ReliabiltyConfig,
 ) (*BotApplication, error) {
+	retrier := retry.New(
+		retry.Attempts(uint(rcfg.RetryPolicy)),
+		retry.Delay(time.Duration(rcfg.RetryPolicyDelayMS)*time.Millisecond),
+	)
 	// so i can pass function-pointer as a default handler
 	app := &BotApplication{}
 	opts := []bot.Option{
@@ -88,12 +96,13 @@ func New(
 	app.scrapperPort = sp
 	app.dialogStorage = newDialogDraftsStorage(logger)
 	appInit(ctx, app)
+	app.retrier = retrier
 	return app, nil
 }
 
 func (bapp *BotApplication) DefaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Warn("Default handler was called for", "chat", update.Message.Chat.ID)
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   defaultMsgText,
 	})
@@ -101,27 +110,24 @@ func (bapp *BotApplication) DefaultHandler(ctx context.Context, b *bot.Bot, upda
 }
 
 func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   startMsgText,
 	})
-	bapp.logger.Info("Start handler was called for", "chat", update.Message.Chat.ID)
 	err := bapp.scrapperPort.RegisterTGChat(ctx, update.Message.Chat.ID)
 	if err != nil {
 		if errors.Is(err, ports.ErrChatAlreadyExist) {
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   msgChatAlreadyRegistered,
 			})
-			return
 		}
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   msgChatRegisterFailed,
 		})
-		return
 	}
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   msgChatRegisteredOK,
 	})
@@ -129,7 +135,7 @@ func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update
 
 func (bapp *BotApplication) HelpHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	bapp.logger.Info("Help handler was called for", "chat", update.Message.Chat.ID)
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   helpMsgText,
 	})
@@ -147,7 +153,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 				"Dialog filling failed",
 				"chat", chatID, "error", err,
 			)
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackStartFailed,
 			})
@@ -161,7 +167,7 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 			"state", bapp.fsm.Current(userID),
 			"user", userID,
 		)
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgTrackAlreadyStarted,
 		})
@@ -182,7 +188,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 				"Failed to add URL",
 				"chat", chatID, "url", rawURL, "err", err,
 			)
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackInvalidURL,
 			})
@@ -200,7 +206,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		}
 		err := bapp.dialogStorage.AddTags(chatID, tagsSplited)
 		if err != nil {
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackBadTags,
 			})
@@ -214,7 +220,7 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 				"Failed to get filled tracking",
 				"chat", chatID, "err", err,
 			)
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackInternalFailure,
 			})
@@ -224,19 +230,19 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 		_, err = bapp.scrapperPort.AddLink(ctx, completedLink)
 		if err != nil {
 			if errors.Is(err, ports.ErrLinkAlreadyTracked) {
-				_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+				_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 					ChatID: chatID,
 					Text:   msgLinkAlreadyTracked,
 				})
 			}
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgTrackSaveFailed,
 			})
 			bapp.fsm.Reset(userID)
 			return
 		}
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgTrackSaveOK,
 		})
@@ -256,13 +262,13 @@ func (bapp *BotApplication) CancelHandler(ctx context.Context, b *bot.Bot, updat
 	userID := update.Message.From.ID
 	chatID := update.Message.Chat.ID
 	if bapp.fsm.Current(userID) == Default {
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgCancelAlreadyReset,
 		})
 	} else {
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgCancelResetOK,
 		})
@@ -274,7 +280,7 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 	text := update.Message.Text
 	textWords := strings.Split(text, " ")
 	if len(textWords) != 2 {
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   msgUntrackUsage,
 		})
@@ -296,12 +302,12 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 			msgOnErr = msgUnexpected
 		}
 
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID, Text: msgOnErr,
 		})
 		return
 	}
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   fmt.Sprintf(msgUntrackFmt, resp.RawURL),
 	})
@@ -315,7 +321,7 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 	if len(words) >= 2 {
 		filter = words[1]
 		if len(words) > 2 {
-			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgListTooManyFilters,
 			})
@@ -334,16 +340,34 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 		default:
 			msgOnErr = msgListUnexpected
 		}
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgOnErr,
 		})
 		return
 	}
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   buildListAnswer(resp, filter),
 	})
+}
+
+func (bapp *BotApplication) sendMsgWithRetry(
+	b *bot.Bot,
+	ctx context.Context, params *bot.SendMessageParams,
+) error {
+	err := bapp.retrier.Do(func() error {
+		_, err := b.SendMessage(ctx, params)
+		return err
+	})
+	bapp.logErr(err, params)
+	return err
+}
+
+func (bapp *BotApplication) logErr(err error, params *bot.SendMessageParams) {
+	if err != nil {
+		bapp.logger.Error("can't send message to telegram", "err", err, "params", *params)
+	}
 }
 
 func buildListAnswer(resp []model.TrackedLinkView, tagFilter string) string {
