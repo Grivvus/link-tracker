@@ -215,11 +215,11 @@ func newBotPort(
 	cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig,
 	logger *slog.Logger,
 ) (ports.BotPort, *grpc.ClientConn, *kafka.Writer, error) {
+	botPort, kafkaWriter, err := initKafkaClient(&cfg, logger)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if cfg.NotificationMethod == "kafka" {
-		botPort, kafkaWriter, err := initKafkaClient(&cfg, logger)
-		if err != nil {
-			return nil, nil, nil, err
-		}
 		return botPort, nil, kafkaWriter, nil
 	}
 
@@ -250,8 +250,8 @@ func newBotPort(
 	}
 
 	return adapters.NewBotAdapter(
-		logger, client, grpcBotClient, cfg.UseGRPC, rcfg,
-	), grpcClient, nil, nil
+		logger, client, grpcBotClient, cfg.UseGRPC, rcfg, botPort,
+	), grpcClient, kafkaWriter, nil
 }
 
 func newScrapperHTTPServer(

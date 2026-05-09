@@ -20,19 +20,21 @@ import (
 )
 
 type BotAdapter struct {
-	logger      *slog.Logger
-	client      bot.ClientInterface
-	grpcClient  bp.BotClient
-	useGRPC     bool
-	callTimeout time.Duration
-	retrier     *retry.Retrier
-	breaker     *gobreaker.TwoStepCircuitBreaker[struct{}]
+	logger               *slog.Logger
+	client               bot.ClientInterface
+	grpcClient           bp.BotClient
+	useGRPC              bool
+	callTimeout          time.Duration
+	retrier              *retry.Retrier
+	breaker              *gobreaker.TwoStepCircuitBreaker[struct{}]
+	fallbackKafkaAdapter ports.BotPort
 }
 
 func NewBotAdapter(
 	logger *slog.Logger, client bot.ClientInterface,
 	grpcClient bp.BotClient, useGRPC bool,
 	rcfg infrastructure.ReliabiltyConfig,
+	fallbackKafkaAdapter ports.BotPort,
 ) ports.BotPort {
 	retrier := retry.New(
 		retry.Attempts(uint(rcfg.RetryPolicy)),
@@ -42,19 +44,23 @@ func NewBotAdapter(
 		return errors.Is(err, ports.ErrBadParams)
 	})
 	return &BotAdapter{
-		logger:      logger,
-		client:      client,
-		grpcClient:  grpcClient,
-		useGRPC:     useGRPC,
-		callTimeout: time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
-		retrier:     retrier,
-		breaker:     breaker,
+		logger:               logger,
+		client:               client,
+		grpcClient:           grpcClient,
+		useGRPC:              useGRPC,
+		callTimeout:          time.Duration(rcfg.ExternalServicesTimeoutSecond) * time.Second,
+		retrier:              retrier,
+		breaker:              breaker,
+		fallbackKafkaAdapter: fallbackKafkaAdapter,
 	}
 }
 
 func (b *BotAdapter) NotifyAboutUpdatedLinks(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
+	if b.breaker.State() == gobreaker.StateClosed {
+		return b.fallbackKafkaAdapter.NotifyAboutUpdatedLinks(ctx, event)
+	}
 	tctx, cancelFunc := context.WithTimeout(ctx, b.callTimeout)
 	defer cancelFunc()
 	_, err := infrastructure.ExecuteWithBreaker(b.breaker, func() (int, error) {

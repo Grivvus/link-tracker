@@ -30,9 +30,9 @@ type Config struct {
 	ConcurrencyBoundary       uint   `envconfig:"CONCURRENCY_BOUNDARY" default:"1"`
 	DBLinksPageSize           int    `envconfig:"DB_LINKS_PAGE_SIZE" default:"50"`
 	NotificationMethod        string `envconfig:"NOTIFICATION_METHOD" default:"kafka"`
-	KafkaBrokersRaw           string `envconfig:"KAFKA_BROKERS"`
-	KafkaTopic                string `envconfig:"KAFKA_TOPIC"`
-	KafkaDLQTopic             string `envconfig:"KAFKA_DLQ_TOPIC"`
+	KafkaBrokersRaw           string `envconfig:"KAFKA_BROKERS" required:"true"`
+	KafkaTopic                string `envconfig:"KAFKA_TOPIC" required:"true"`
+	KafkaDLQTopic             string `envconfig:"KAFKA_DLQ_TOPIC" required:"true"`
 	KafkaMaxAttempts          int    `envconfig:"KAFKA_MAX_ATTEMPTS" default:"5"`
 	SchemaRegistryURL         string `envconfig:"SCHEMA_REGISTRY_URL"`
 	ValkeyClusterAddressesRaw string `envconfig:"VALKEY_CLUSTER_ADDRESSES" required:"true"`
@@ -83,20 +83,19 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf("%w: ttl must be a positive number", ErrInvalidEnv)
 	}
 
-	if cfg.NotificationMethod == "kafka" {
-		if cfg.KafkaBrokersRaw == "" {
-			return cfg, fmt.Errorf(
-				"%w: KAFKA_BROKERS must be set",
-				ErrInvalidEnv,
-			)
-		}
-		if cfg.KafkaTopic == "" || cfg.KafkaDLQTopic == "" {
-			return cfg, fmt.Errorf("%w: all kafka topics must be set", ErrInvalidEnv)
-		}
-		if cfg.SchemaRegistryURL == "" {
-			return cfg, fmt.Errorf("%w: SCHEMA_REGISTRY_URL must be set", ErrInvalidEnv)
-		}
+	if cfg.KafkaBrokersRaw == "" {
+		return cfg, fmt.Errorf(
+			"%w: KAFKA_BROKERS must be set",
+			ErrInvalidEnv,
+		)
 	}
+	if cfg.KafkaTopic == "" || cfg.KafkaDLQTopic == "" {
+		return cfg, fmt.Errorf("%w: all kafka topics must be set", ErrInvalidEnv)
+	}
+	if cfg.SchemaRegistryURL == "" {
+		return cfg, fmt.Errorf("%w: SCHEMA_REGISTRY_URL must be set", ErrInvalidEnv)
+	}
+
 	return cfg, nil
 }
 
