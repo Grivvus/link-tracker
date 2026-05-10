@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -176,8 +177,12 @@ func newScheduler(
 	notificationOutboxRepo repository.NotificationOutboxRepository,
 	subscriptionRepo repository.SubscriptionRepository,
 ) (gocron.Scheduler, error) {
+	shouldRetryOnHTTP, err := rcfg.GetRetryHTTPCodes()
+	if err != nil {
+		return nil, err
+	}
 	shouldRetryFn := func(statusCode int) bool {
-		return statusCode >= 500
+		return slices.Contains(shouldRetryOnHTTP, statusCode)
 	}
 	linkStatePort := adapters.NewLinkStateAdapter(
 		logger,
@@ -249,8 +254,25 @@ func newBotPort(
 		grpcBotClient = botpb.NewBotClient(grpcClient)
 	}
 
+	shouldRetryOnHTTP, err := rcfg.GetRetryHTTPCodes()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	shouldRetryOnGRPC, err := rcfg.GetRetryGRPCCodes()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	return adapters.NewBotAdapter(
-		logger, client, grpcBotClient, cfg.UseGRPC, rcfg, botPort,
+		logger, client, grpcBotClient,
+		cfg.UseGRPC, rcfg, botPort,
+		func(i int) bool {
+			return slices.Contains(shouldRetryOnHTTP, i)
+		},
+		func(i int) bool {
+			return slices.Contains(shouldRetryOnGRPC, i)
+		},
 	), grpcClient, kafkaWriter, nil
 }
 

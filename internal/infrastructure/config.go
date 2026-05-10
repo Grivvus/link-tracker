@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/kelseyhightower/envconfig"
@@ -103,6 +104,8 @@ type ReliabiltyConfig struct {
 	ExternalServicesTimeoutSecond int64  `envconfig:"EXTERNAL_SERVICES_TIMEOUT_SECOND" default:"5"`
 	RetryPolicy                   int    `envconfig:"RETRY_POLICY" default:"3"`
 	RetryPolicyDelayMS            int64  `envconfig:"RETRY_POLICY_DELAY_MS" default:"100"`
+	RetryOnHTTPCodes              string `envconfig:"RETRY_ON_HTTP_CODES" default:"500"`
+	RetryOnGRPCCodes              string `envconfig:"RETRY_ON_GRPC_CODES" default:"13"`
 	ReateLimiterMaxBurst          int    `envconfig:"RATE_LIMITER_MAX_BURST" default:"40"`
 	RateLimiterRequestsPerSecond  int    `envconfig:"RATE_LIMITER_REQUESTS_PER_SECOND" default:"10"`
 	BreakerHalfopenMaxRequests    uint32 `envconfig:"BREAKER_HALFOPEN_MAX_REQUESTS" default:"3"`
@@ -146,4 +149,30 @@ func NewReliabilityConfig() (ReliabiltyConfig, error) {
 		return cfg, fmt.Errorf("%w: BreakerFailureTreshold must be in (0, 100]", ErrInvalidEnv)
 	}
 	return cfg, nil
+}
+
+func (r ReliabiltyConfig) GetRetryHTTPCodes() ([]int, error) {
+	splited := strings.Split(r.RetryOnHTTPCodes, ",")
+	httpCodes := make([]int, len(splited))
+	for i, code := range splited {
+		icode, err := strconv.Atoi(code)
+		if err != nil {
+			return nil, err
+		}
+		httpCodes[i] = icode
+	}
+	return httpCodes, nil
+}
+
+func (r ReliabiltyConfig) GetRetryGRPCCodes() ([]int, error) {
+	splited := strings.Split(r.RetryOnGRPCCodes, ",")
+	grpcCodes := make([]int, len(splited))
+	for i, code := range splited {
+		icode, err := strconv.Atoi(code)
+		if err != nil {
+			return nil, err
+		}
+		grpcCodes[i] = icode
+	}
+	return grpcCodes, nil
 }

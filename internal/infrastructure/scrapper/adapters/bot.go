@@ -26,6 +26,8 @@ type BotAdapter struct {
 	useGRPC              bool
 	callTimeout          time.Duration
 	retrier              *retry.Retrier
+	shouldRetryHTTP      func(int) bool
+	shouldRetryGRPC      func(int) bool
 	breaker              *gobreaker.TwoStepCircuitBreaker[struct{}]
 	fallbackKafkaAdapter ports.BotPort
 }
@@ -35,6 +37,8 @@ func NewBotAdapter(
 	grpcClient bp.BotClient, useGRPC bool,
 	rcfg infrastructure.ReliabiltyConfig,
 	fallbackKafkaAdapter ports.BotPort,
+	shouldRetryHTTP func(int) bool,
+	shouldRetryGRPC func(int) bool,
 ) ports.BotPort {
 	retrier := retry.New(
 		retry.Attempts(uint(rcfg.RetryPolicy)),
@@ -52,6 +56,8 @@ func NewBotAdapter(
 		retrier:              retrier,
 		breaker:              breaker,
 		fallbackKafkaAdapter: fallbackKafkaAdapter,
+		shouldRetryHTTP:      shouldRetryHTTP,
+		shouldRetryGRPC:      shouldRetryGRPC,
 	}
 }
 
@@ -100,7 +106,10 @@ func (b *BotAdapter) httpNotify(
 				case http.StatusBadRequest:
 					return retry.Unrecoverable(ports.ErrBadParams)
 				default:
-					return errors.New("unexpected error")
+					if b.shouldRetryHTTP(resp.StatusCode) {
+						return errors.New("unexpected error")
+					}
+					return retry.Unrecoverable(errors.New("unexpected error"))
 				}
 			}
 			return nil
@@ -127,7 +136,10 @@ func (b *BotAdapter) grpcNotify(
 				case codes.InvalidArgument:
 					return retry.Unrecoverable(ports.ErrBadParams)
 				default:
-					return errors.New("unexpected error")
+					if b.shouldRetryGRPC(int(statusCode)) {
+						return errors.New("unexpected error")
+					}
+					return retry.Unrecoverable(errors.New("unexpected error"))
 				}
 			}
 			return nil
