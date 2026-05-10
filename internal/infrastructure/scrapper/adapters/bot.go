@@ -58,7 +58,7 @@ func NewBotAdapter(
 func (b *BotAdapter) NotifyAboutUpdatedLinks(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
-	if b.breaker.State() == gobreaker.StateClosed {
+	if b.breaker.State() == gobreaker.StateOpen {
 		return b.fallbackKafkaAdapter.NotifyAboutUpdatedLinks(ctx, event)
 	}
 	tctx, cancelFunc := context.WithTimeout(ctx, b.callTimeout)
