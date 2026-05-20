@@ -47,6 +47,8 @@ func (f *fakeSummarizer) Summarize(
 }
 
 func TestEventUpdateProcessorUseCase_Process_FiltersByStopWords(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name          string
 		description   string
@@ -91,6 +93,8 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByStopWords(t *testing.T) {
 }
 
 func TestEventUpdateProcessorUseCase_Process_FiltersByExcludedAuthors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name          string
 		author        string
@@ -135,6 +139,8 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByExcludedAuthors(t *testing
 }
 
 func TestEventUpdateProcessorUseCase_Process_FiltersByMinimumDescriptionLength(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name          string
 		description   string
@@ -179,6 +185,8 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByMinimumDescriptionLength(t
 }
 
 func TestEventUpdateProcessorUseCase_Process_PublishesValidUpdate(t *testing.T) {
+	t.Parallel()
+
 	settings := testAgentSettings(func(settings *agent.AgentSettings) {
 		settings.Summarization.Threshold = 1000
 	})
@@ -220,6 +228,8 @@ func TestEventUpdateProcessorUseCase_Process_SummarizesLongText(t *testing.T) {
 }
 
 func TestEventUpdateProcessorUseCase_Process_PassesShortTextWithoutSummarization(t *testing.T) {
+	t.Parallel()
+
 	settings := testAgentSettings(func(settings *agent.AgentSettings) {
 		settings.Summarization.Threshold = 1000
 	})

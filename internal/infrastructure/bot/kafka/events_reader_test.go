@@ -24,8 +24,10 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/kafka"
+	commonKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
 )
 
 const groupID = "bot-events-reader"
@@ -219,13 +221,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_ReadNewValidMessage() {
 	ctx, cancelFunc := context.WithCancel(s.ctx)
 	defer cancelFunc()
 	botAdapter := &BotAdapterTestImpl{}
-	eventsReader := kafka.NewEventsReader(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		botAdapter,
-		s.kafkaEventsReader, s.kafkaDLQWriter,
-		s.avroCodec,
-		5,
-	)
+	eventsReader := s.newEventsReader(botAdapter, 5)
 	eventsReader.Start(ctx)
 	s.waitReaderReady(s.kafkaEventsReader)
 	s.writeMessageAndWaitReady(ctx, kafkaClient.Message{
@@ -268,13 +264,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_DoesNotWriteToDLQWhenRetryPolic
 	defer cancelFunc()
 
 	botAdapter := &BotAdapterFailingExact3Times{}
-	eventsReader := kafka.NewEventsReader(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		botAdapter,
-		s.kafkaEventsReader, s.kafkaDLQWriter,
-		s.avroCodec,
-		5,
-	)
+	eventsReader := s.newEventsReader(botAdapter, 5)
 	eventsReader.Start(ctx)
 	s.waitReaderReady(s.kafkaEventsReader)
 	s.writeMessageAndWaitReady(ctx, kafkaClient.Message{
@@ -304,13 +294,7 @@ func (s *EventsReaderTestSuite) TestEventsReader_WritesToDLQWhenRetryPolicyExcee
 	defer cancelFunc()
 
 	botAdapter := &BotAdapterFailingImpl{}
-	eventsReader := kafka.NewEventsReader(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		botAdapter,
-		s.kafkaEventsReader, s.kafkaDLQWriter,
-		s.avroCodec,
-		3,
-	)
+	eventsReader := s.newEventsReader(botAdapter, 3)
 	eventsReader.Start(ctx)
 	s.waitReaderReady(s.kafkaEventsReader)
 	s.writeMessageAndWaitReady(ctx, kafkaClient.Message{
@@ -331,13 +315,7 @@ func (s *EventsReaderTestSuite) writeInvalidMessageAndAssertDLQ(
 	ctx, cancelFunc := context.WithCancel(s.ctx)
 	defer cancelFunc()
 
-	eventsReader := kafka.NewEventsReader(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		botAdapter,
-		s.kafkaEventsReader, s.kafkaDLQWriter,
-		s.avroCodec,
-		5,
-	)
+	eventsReader := s.newEventsReader(botAdapter, 5)
 	eventsReader.Start(ctx)
 	s.waitReaderReady(s.kafkaEventsReader)
 
@@ -352,6 +330,19 @@ func (s *EventsReaderTestSuite) writeInvalidMessageAndAssertDLQ(
 	s.Assert().Equal(msg.Value, dlqMsg.Value)
 
 	s.assertDLQIsEmpty()
+}
+
+func (s *EventsReaderTestSuite) newEventsReader(
+	botAdapter ports.BotPort, retryPolicy int,
+) *kafka.EventsReader {
+	return kafka.NewEventsReader(*commonKafka.NewEventsReader(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		commonKafka.HandlerFromBotPort(botAdapter),
+		s.kafkaEventsReader,
+		s.kafkaDLQWriter,
+		s.avroCodec,
+		retryPolicy,
+	))
 }
 
 func createKafkaTopics(ctx context.Context, broker string, topics ...string) error {
