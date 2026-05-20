@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -22,14 +23,11 @@ func (sum *DummySummarizer) Summarize(
 	ctx context.Context, updateEvent model.LinkUpdatedEvent,
 	treshold uint,
 ) (model.LinkUpdatedEvent, error) {
+	var sb strings.Builder
 	sum.logger.Info("summarization was invoked")
-	summarized := "Summarized message."
-	if len(updateEvent.Description) > int(treshold) {
-		summarized += updateEvent.Description[:treshold]
-		summarized += "..."
-	} else {
-		summarized += updateEvent.Description
-	}
+	sb.WriteString("Summarized message.")
+	sb.WriteString(updateEvent.Description[:treshold])
+	sb.WriteString("...")
 	return model.LinkUpdatedEvent{
 		LinkID:       updateEvent.LinkID,
 		RawURL:       updateEvent.RawURL,
@@ -37,6 +35,6 @@ func (sum *DummySummarizer) Summarize(
 		UpdateName:   updateEvent.UpdateName,
 		UpdateAuthor: updateEvent.UpdateAuthor,
 		ChatIDs:      updateEvent.ChatIDs,
-		Description:  summarized,
+		Description:  sb.String(),
 	}, nil
 }
