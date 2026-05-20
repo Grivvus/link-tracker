@@ -26,6 +26,7 @@ func (sum *DummySummarizer) Summarize(
 	summarized := "Summarized message."
 	if len(updateEvent.Description) > int(treshold) {
 		summarized += updateEvent.Description[:treshold]
+		summarized += "..."
 	} else {
 		summarized += updateEvent.Description
 	}
