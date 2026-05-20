@@ -3,6 +3,7 @@ module gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker
 go 1.26.2
 
 require (
+	github.com/BurntSushi/toml v1.3.2
 	github.com/avast/retry-go/v5 v5.0.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.6.0

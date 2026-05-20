@@ -23,6 +23,7 @@ import (
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	scrapperpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/httputils"
+	kafkaCommon "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
 	oapibot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"google.golang.org/grpc"
@@ -128,11 +129,9 @@ func newBotRuntime(
 	app.httpServer = newBotHTTPServer(cfg, limiter, logger, botPort)
 	pb.RegisterBotServer(app.grpcServer, server.NewBotGRPCServer(logger, botPort))
 
-	if cfg.NotificationMethod == "kafka" {
-		app.kafkaReader, app.kafkaWriter, err = initKafka(ctx, &cfg, logger, botPort)
-		if err != nil {
-			return nil, err
-		}
+	app.kafkaReader, app.kafkaWriter, err = initKafka(ctx, &cfg, &rcfg, logger, botPort)
+	if err != nil {
+		return nil, err
 	}
 
 	return app, nil
@@ -268,6 +267,7 @@ func joinRuntimeErr(base error, next error) error {
 
 func initKafka(
 	ctx context.Context, cfg *infrastructure.Config,
+	rcfg *infrastructure.ReliabiltyConfig,
 	logger *slog.Logger, bp ports.BotPort,
 ) (*kafka.Reader, *kafka.Writer, error) {
 	brokers, err := cfg.KafkaBrokers()
@@ -283,7 +283,7 @@ func initKafka(
 		ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
 	}
 	notificationsReader := kafka.NewReader(kafka.ReaderConfig{
-		Topic:       cfg.KafkaTopic,
+		Topic:       cfg.KafkaProcessedTopic,
 		Brokers:     brokers,
 		Logger:      kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Info)),
 		ErrorLogger: kafka.LoggerFunc(infrastructure.KafkaLoggerFn(logger.Error)),
@@ -297,8 +297,10 @@ func initKafka(
 		return nil, nil, err
 	}
 	reader := notifications.NewEventsReader(
-		logger, bp, notificationsReader, dlqWriter, codec, cfg.KafkaMaxAttempts,
-	)
+		*kafkaCommon.NewEventsReader(
+			logger, kafkaCommon.HandlerFromBotPort(bp),
+			notificationsReader, dlqWriter, codec, rcfg.RetryPolicy,
+		))
 	reader.Start(ctx)
 	return notificationsReader, dlqWriter, nil
 }

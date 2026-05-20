@@ -34,6 +34,17 @@ services:
       - "50052:50051"
     restart: no
 
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    restart: no
+
   db:
     image: postgres:18-alpine
     env_file:

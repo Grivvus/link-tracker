@@ -1,0 +1,7 @@
+[filtering]
+stop-words = ["spam", "ads", "promo"]
+excluded-authors = ["bot-user"]
+min-length = 20
+
+[summarization]
+threshold = 500

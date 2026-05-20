@@ -34,6 +34,7 @@ type Config struct {
 	KafkaBrokersRaw           string `envconfig:"KAFKA_BROKERS" required:"true"`
 	KafkaTopic                string `envconfig:"KAFKA_TOPIC" required:"true"`
 	KafkaDLQTopic             string `envconfig:"KAFKA_DLQ_TOPIC" required:"true"`
+	KafkaProcessedTopic       string `envconfig:"KAFKA_PROCESSED_TOPIC" required:"true"`
 	KafkaMaxAttempts          int    `envconfig:"KAFKA_MAX_ATTEMPTS" default:"5"`
 	SchemaRegistryURL         string `envconfig:"SCHEMA_REGISTRY_URL"`
 	ValkeyClusterAddressesRaw string `envconfig:"VALKEY_CLUSTER_ADDRESSES" required:"true"`

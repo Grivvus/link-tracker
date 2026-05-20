@@ -1,0 +1,21 @@
+FROM golang:1.26.2-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN GOOS=linux go build -o agent ./cmd/agent/
+
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+COPY --from=builder /app/agent /usr/bin/agent
+COPY --from=builder /app/avro/link_update.avsc /link_update.avsc
+COPY --from=builder /app/agent-settings.toml /agent-settings.toml
+RUN chmod +x /usr/bin/agent
+
+ENTRYPOINT ["/usr/bin/agent"]
