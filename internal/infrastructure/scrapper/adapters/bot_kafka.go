@@ -38,7 +38,7 @@ func (b *BotKafkaAdapter) NotifyAboutUpdatedLinks(
 func (b *BotKafkaAdapter) kafkaNotify(
 	ctx context.Context, event model.LinkUpdatedEvent,
 ) error {
-	rawKey := strconv.Itoa(int(event.LinkID)) + event.UpdateName
+	rawKey := strconv.FormatInt(event.LinkID, 10)
 	key, err := json.Marshal(rawKey)
 	if err != nil {
 		return fmt.Errorf("%w: can't encode message", ports.ErrBadParams)
