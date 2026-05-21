@@ -63,6 +63,7 @@ func (n Notification) ToModelOutboxLinkEvent() (model.OutboxLinkUpdateEvent, err
 		UpdateName:   updateEvent.Title,
 		UpdateAuthor: updateEvent.UpdateAuthor,
 		Description:  updateEvent.Description,
+		Priority:     model.PriorityFromString(string(updateEvent.Priority)),
 	}
 	return model.OutboxLinkUpdateEvent{
 		ID:     n.ID,

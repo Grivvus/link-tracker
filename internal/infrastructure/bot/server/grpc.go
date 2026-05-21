@@ -43,6 +43,7 @@ func (s *BotGRPCServer) NotifyAboutUpdate(
 		UpdateName:   in.Title,
 		Description:  in.Description,
 		ChatIDs:      in.TgChatIds,
+		Priority:     model.PriorityFromProtobugPriority(int32(in.Priority)),
 	})
 	if err != nil {
 		s.logger.Error("can't send notifications", "err", err)

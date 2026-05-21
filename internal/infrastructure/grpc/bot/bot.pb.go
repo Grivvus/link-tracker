@@ -22,6 +22,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Priority int32
+
+const (
+	Priority_PRIORITY_MEDIUM Priority = 0 // default
+	Priority_PRIORITY_LOW    Priority = 2 // maps from -1
+	Priority_PRIORITY_HIGH   Priority = 1 // maps from 1
+)
+
+// Enum value maps for Priority.
+var (
+	Priority_name = map[int32]string{
+		0: "PRIORITY_MEDIUM",
+		2: "PRIORITY_LOW",
+		1: "PRIORITY_HIGH",
+	}
+	Priority_value = map[string]int32{
+		"PRIORITY_MEDIUM": 0,
+		"PRIORITY_LOW":    2,
+		"PRIORITY_HIGH":   1,
+	}
+)
+
+func (x Priority) Enum() *Priority {
+	p := new(Priority)
+	*p = x
+	return p
+}
+
+func (x Priority) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Priority) Descriptor() protoreflect.EnumDescriptor {
+	return file_grpc_bot_bot_proto_enumTypes[0].Descriptor()
+}
+
+func (Priority) Type() protoreflect.EnumType {
+	return &file_grpc_bot_bot_proto_enumTypes[0]
+}
+
+func (x Priority) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Priority.Descriptor instead.
+func (Priority) EnumDescriptor() ([]byte, []int) {
+	return file_grpc_bot_bot_proto_rawDescGZIP(), []int{0}
+}
+
 type LinkUpdate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -31,6 +80,7 @@ type LinkUpdate struct {
 	UpdatedAt     string                 `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	TgChatIds     []int64                `protobuf:"varint,4,rep,packed,name=tgChatIds,proto3" json:"tgChatIds,omitempty"`
+	Priority      Priority               `protobuf:"varint,8,opt,name=priority,proto3,enum=bot.Priority" json:"priority,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,11 +164,18 @@ func (x *LinkUpdate) GetTgChatIds() []int64 {
 	return nil
 }
 
+func (x *LinkUpdate) GetPriority() Priority {
+	if x != nil {
+		return x.Priority
+	}
+	return Priority_PRIORITY_MEDIUM
+}
+
 var File_grpc_bot_bot_proto protoreflect.FileDescriptor
 
 const file_grpc_bot_bot_proto_rawDesc = "" +
 	"\n" +
-	"\x12grpc/bot/bot.proto\x12\x03bot\x1a\x1bgoogle/protobuf/empty.proto\"\xc8\x01\n" +
+	"\x12grpc/bot/bot.proto\x12\x03bot\x1a\x1bgoogle/protobuf/empty.proto\"\xf3\x01\n" +
 	"\n" +
 	"LinkUpdate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x10\n" +
@@ -128,7 +185,12 @@ const file_grpc_bot_bot_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\a \x01(\tR\tupdatedAt\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1c\n" +
-	"\ttgChatIds\x18\x04 \x03(\x03R\ttgChatIds2C\n" +
+	"\ttgChatIds\x18\x04 \x03(\x03R\ttgChatIds\x12)\n" +
+	"\bpriority\x18\b \x01(\x0e2\r.bot.PriorityR\bpriority*D\n" +
+	"\bPriority\x12\x13\n" +
+	"\x0fPRIORITY_MEDIUM\x10\x00\x12\x10\n" +
+	"\fPRIORITY_LOW\x10\x02\x12\x11\n" +
+	"\rPRIORITY_HIGH\x10\x012C\n" +
 	"\x03Bot\x12<\n" +
 	"\x11NotifyAboutUpdate\x12\x0f.bot.LinkUpdate\x1a\x16.google.protobuf.EmptyBgZegitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpcb\x06proto3"
 
@@ -144,19 +206,22 @@ func file_grpc_bot_bot_proto_rawDescGZIP() []byte {
 	return file_grpc_bot_bot_proto_rawDescData
 }
 
+var file_grpc_bot_bot_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_grpc_bot_bot_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_grpc_bot_bot_proto_goTypes = []any{
-	(*LinkUpdate)(nil),    // 0: bot.LinkUpdate
-	(*emptypb.Empty)(nil), // 1: google.protobuf.Empty
+	(Priority)(0),         // 0: bot.Priority
+	(*LinkUpdate)(nil),    // 1: bot.LinkUpdate
+	(*emptypb.Empty)(nil), // 2: google.protobuf.Empty
 }
 var file_grpc_bot_bot_proto_depIdxs = []int32{
-	0, // 0: bot.Bot.NotifyAboutUpdate:input_type -> bot.LinkUpdate
-	1, // 1: bot.Bot.NotifyAboutUpdate:output_type -> google.protobuf.Empty
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: bot.LinkUpdate.priority:type_name -> bot.Priority
+	1, // 1: bot.Bot.NotifyAboutUpdate:input_type -> bot.LinkUpdate
+	2, // 2: bot.Bot.NotifyAboutUpdate:output_type -> google.protobuf.Empty
+	2, // [2:3] is the sub-list for method output_type
+	1, // [1:2] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_grpc_bot_bot_proto_init() }
@@ -169,13 +234,14 @@ func file_grpc_bot_bot_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_grpc_bot_bot_proto_rawDesc), len(file_grpc_bot_bot_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_grpc_bot_bot_proto_goTypes,
 		DependencyIndexes: file_grpc_bot_bot_proto_depIdxs,
+		EnumInfos:         file_grpc_bot_bot_proto_enumTypes,
 		MessageInfos:      file_grpc_bot_bot_proto_msgTypes,
 	}.Build()
 	File_grpc_bot_bot_proto = out.File

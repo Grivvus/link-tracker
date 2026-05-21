@@ -48,13 +48,15 @@ func formNotificationMessage(updateInfo model.LinkUpdatedEvent) string {
 	return fmt.Sprintf(
 		`
 %s
+priority: %s
 url: %s
 updated at: %v
 title: %s
 update author: %s
 short description: %s
 `,
-		baseMsg, updateInfo.RawURL, updateInfo.UpdatedAt,
+		baseMsg, updateInfo.Priority.String(),
+		updateInfo.RawURL, updateInfo.UpdatedAt,
 		updateInfo.UpdateName, updateInfo.UpdateAuthor, updateInfo.Description,
 	)
 }

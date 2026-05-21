@@ -10,6 +10,12 @@ service Bot {
   rpc NotifyAboutUpdate(LinkUpdate) returns (google.protobuf.Empty);
 }
 
+enum Priority {
+  PRIORITY_MEDIUM = 0; // default
+  PRIORITY_LOW    = 2; // maps from -1
+  PRIORITY_HIGH   = 1; // maps from 1
+}
+
 message LinkUpdate {
   int64 id = 1;
   string url = 2;
@@ -18,4 +24,5 @@ message LinkUpdate {
   string updated_at = 7;
   string description = 3;
   repeated int64 tgChatIds = 4;
+  Priority priority = 8;
 }

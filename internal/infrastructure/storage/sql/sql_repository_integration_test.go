@@ -321,6 +321,7 @@ func runOutboxScenario(t *testing.T, repos repoPair) outboxScenarioResult {
 			UpdateAuthor: "alice",
 			Description:  "first event",
 			ChatIDs:      []int64{chatID1, chatID2},
+			Priority:     model.PriorityHigh,
 		},
 		{
 			LinkID:       storedLink.ID,
@@ -330,6 +331,7 @@ func runOutboxScenario(t *testing.T, repos repoPair) outboxScenarioResult {
 			UpdateAuthor: "bob",
 			Description:  "second event",
 			ChatIDs:      []int64{chatID1, chatID2},
+			Priority:     model.PriorityLow,
 		},
 		{
 			LinkID:       storedLink.ID,
@@ -426,6 +428,7 @@ func assertLinkUpdatedEventEqual(
 	require.Equal(t, expected.UpdateAuthor, actual.UpdateAuthor, path+".update_author")
 	require.Equal(t, expected.Description, actual.Description, path+".description")
 	require.Equal(t, expected.ChatIDs, actual.ChatIDs, path+".chat_ids")
+	require.Equal(t, expected.Priority, actual.Priority, path+".priority")
 }
 
 func snapshotsFromSubscriptions(

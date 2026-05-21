@@ -69,6 +69,9 @@ func (c *Codec) Encode(msg model.LinkUpdatedEvent) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %w", SerializationError, err)
 	}
 	native, _, err := c.codec.NativeFromTextual(jencoded)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", SerializationError, err)
+	}
 	bytes, err := c.codec.BinaryFromNative(nil, native)
 	schemaIDBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(schemaIDBytes, uint32(c.schemaID))
@@ -118,6 +121,7 @@ func dtoToModel(dto bot.LinkUpdate) (model.LinkUpdatedEvent, error) {
 		RawURL:       dto.Url,
 		ChatIDs:      dto.TgChatIds,
 		LinkID:       dto.Id,
+		Priority:     model.PriorityFromString(string(dto.Priority)),
 	}, nil
 }
 
@@ -130,5 +134,6 @@ func modelToDTO(upd model.LinkUpdatedEvent) bot.LinkUpdate {
 		Title:        upd.UpdateName,
 		UpdateAuthor: upd.UpdateAuthor,
 		UpdatedAt:    upd.UpdatedAt.Format(time.RFC3339),
+		Priority:     bot.LinkUpdatePriority(upd.Priority.String()),
 	}
 }

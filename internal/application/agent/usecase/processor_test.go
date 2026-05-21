@@ -202,6 +202,90 @@ func TestEventUpdateProcessorUseCase_Process_PublishesValidUpdate(t *testing.T) 
 	require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
 }
 
+func TestEventUpdateProcessorUseCase_Process_AssignsHighPriority(t *testing.T) {
+	t.Parallel()
+
+	settings := testAgentSettings(func(settings *agent.AgentSettings) {
+		settings.Prioritization.HighKeywords = []string{"critical", "breaking"}
+		settings.Prioritization.LowKeywords = []string{"minor"}
+	})
+	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
+		event.Description = "critical production issue"
+	})
+	summarizer := &fakeSummarizer{}
+	publisher := &fakeProcessedUpdatePublisher{}
+	processor := newTestProcessor(settings, summarizer, publisher)
+
+	err := processor.Process(context.Background(), event)
+
+	require.NoError(t, err)
+	require.Len(t, publisher.events, 1)
+	require.Equal(t, model.PriorityHigh, publisher.events[0].Priority)
+}
+
+func TestEventUpdateProcessorUseCase_Process_AssignsLowPriority(t *testing.T) {
+	t.Parallel()
+
+	settings := testAgentSettings(func(settings *agent.AgentSettings) {
+		settings.Prioritization.HighKeywords = []string{"critical", "breaking"}
+		settings.Prioritization.LowKeywords = []string{"minor", "docs"}
+	})
+	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
+		event.Description = "minor docs update"
+	})
+	summarizer := &fakeSummarizer{}
+	publisher := &fakeProcessedUpdatePublisher{}
+	processor := newTestProcessor(settings, summarizer, publisher)
+
+	err := processor.Process(context.Background(), event)
+
+	require.NoError(t, err)
+	require.Len(t, publisher.events, 1)
+	require.Equal(t, model.PriorityLow, publisher.events[0].Priority)
+}
+
+func TestEventUpdateProcessorUseCase_Process_AssignsMediumPriorityByDefault(t *testing.T) {
+	t.Parallel()
+
+	settings := testAgentSettings(func(settings *agent.AgentSettings) {
+		settings.Prioritization.HighKeywords = []string{"critical"}
+		settings.Prioritization.LowKeywords = []string{"minor"}
+	})
+	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
+		event.Description = "regular update"
+	})
+	summarizer := &fakeSummarizer{}
+	publisher := &fakeProcessedUpdatePublisher{}
+	processor := newTestProcessor(settings, summarizer, publisher)
+
+	err := processor.Process(context.Background(), event)
+
+	require.NoError(t, err)
+	require.Len(t, publisher.events, 1)
+	require.Equal(t, model.PriorityMedium, publisher.events[0].Priority)
+}
+
+func TestEventUpdateProcessorUseCase_Process_AssignsHighPriorityWhenHighAndLowKeywordsMatch(t *testing.T) {
+	t.Parallel()
+
+	settings := testAgentSettings(func(settings *agent.AgentSettings) {
+		settings.Prioritization.HighKeywords = []string{"critical"}
+		settings.Prioritization.LowKeywords = []string{"minor"}
+	})
+	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
+		event.Description = "critical minor update"
+	})
+	summarizer := &fakeSummarizer{}
+	publisher := &fakeProcessedUpdatePublisher{}
+	processor := newTestProcessor(settings, summarizer, publisher)
+
+	err := processor.Process(context.Background(), event)
+
+	require.NoError(t, err)
+	require.Len(t, publisher.events, 1)
+	require.Equal(t, model.PriorityHigh, publisher.events[0].Priority)
+}
+
 func TestEventUpdateProcessorUseCase_Process_SummarizesLongText(t *testing.T) {
 	settings := testAgentSettings(func(settings *agent.AgentSettings) {
 		settings.Summarization.Threshold = 10
@@ -255,6 +339,7 @@ func newTestProcessor(
 	return usecase.NewEventUpdateProcessorUseCase(
 		usecase.NewUpdateFilter(settings),
 		summarizer,
+		usecase.NewPrioritizer(settings),
 		publisher,
 		settings.Summarization.Threshold,
 	)

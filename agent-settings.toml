@@ -5,3 +5,10 @@ min-length = 20
 
 [summarization]
 threshold = 500
+
+[prioritization]
+high-keywords = ["critical", "breaking"]
+low-keywords = ["typo", "minor", "docs"]
+
+[grouping]
+window-ms = 30000

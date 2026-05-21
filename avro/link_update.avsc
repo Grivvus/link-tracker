@@ -9,6 +9,7 @@
     {"name": "description", "type": "string"},
     {"name": "updateAuthor", "type": "string"},
     {"name": "updatedAt", "type": "string"},
-    {"name": "tgChatIds", "type": {"type": "array", "items": "long"}}
+    {"name": "tgChatIds", "type": {"type": "array", "items": "long"}},
+    {"name":"priority","type":{"type":"enum","name":"Priority","symbols":["Low","Medium","High"]}}
   ]
 }

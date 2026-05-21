@@ -262,6 +262,7 @@ func (s *RawEventsReaderIntegrationSuite) newRawEventsReader() *agentKafka.RawEv
 	processor := usecase.NewEventUpdateProcessorUseCase(
 		usecase.NewUpdateFilter(settings),
 		noopSummarizer{},
+		usecase.NewPrioritizer(settings),
 		publisher,
 		settings.Summarization.Threshold,
 	)

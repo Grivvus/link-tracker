@@ -7,8 +7,10 @@ import (
 )
 
 type AgentSettings struct {
-	Filtering     Filtering     `toml:"filtering"`
-	Summarization Summarization `toml:"summarization"`
+	Filtering      Filtering      `toml:"filtering"`
+	Summarization  Summarization  `toml:"summarization"`
+	Prioritization Prioritization `toml:"prioritization"`
+	Grouping       Grouping       `toml:"grouping"`
 }
 
 type Filtering struct {
@@ -17,8 +19,17 @@ type Filtering struct {
 	MinLength       int      `toml:"min-length"`
 }
 
+type Prioritization struct {
+	HighKeywords []string `toml:"high-keywords"`
+	LowKeywords  []string `toml:"low-keywords"`
+}
+
 type Summarization struct {
 	Threshold uint `toml:"threshold"`
+}
+
+type Grouping struct {
+	WindowMS uint `toml:"window-ms"`
 }
 
 func NewAgentSettings(settingsFile string) (AgentSettings, error) {

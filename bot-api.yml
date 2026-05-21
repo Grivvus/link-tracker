@@ -46,6 +46,7 @@ components:
         - updateAuthor
         - updatedAt
         - title
+        - priority
       properties:
         id:
           type: integer
@@ -66,3 +67,6 @@ components:
           items:
             type: integer
             format: int64
+        priority:
+          type: string
+          enum: ["Low", "Medium", "High"]

@@ -107,6 +107,7 @@ func newAgentRuntime(
 	eventsProcessor := usecase.NewEventUpdateProcessorUseCase(
 		usecase.NewUpdateFilter(agentSettings),
 		summarizer,
+		usecase.NewPrioritizer(agentSettings),
 		publisher,
 		agentSettings.Summarization.Threshold,
 	)

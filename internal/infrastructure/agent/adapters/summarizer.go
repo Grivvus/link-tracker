@@ -36,5 +36,6 @@ func (sum *DummySummarizer) Summarize(
 		UpdateAuthor: updateEvent.UpdateAuthor,
 		ChatIDs:      updateEvent.ChatIDs,
 		Description:  sb.String(),
+		Priority:     updateEvent.Priority,
 	}, nil
 }

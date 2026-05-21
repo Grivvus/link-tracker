@@ -37,6 +37,7 @@ func TestCodec_DecodeEncodeGivesTheSameResult(t *testing.T) {
 		UpdateAuthor: "vasia pupkin",
 		Description:  "new major version has been released",
 		ChatIDs:      []int64{int64(10), int64(11), int64(12)},
+		Priority:     model.PriorityHigh,
 	}
 	encoded, err := codec.Encode(testModel)
 	require.NoError(t, err)
@@ -48,6 +49,7 @@ func TestCodec_DecodeEncodeGivesTheSameResult(t *testing.T) {
 	assert.Equal(t, testModel.Description, testModelDecoded.Description)
 	assert.Equal(t, testModel.LinkID, testModelDecoded.LinkID)
 	assert.Equal(t, testModel.RawURL, testModelDecoded.RawURL)
+	assert.Equal(t, testModel.Priority, testModelDecoded.Priority)
 	assert.Equal(t, testModel.UpdatedAt.Format(time.RFC3339), testModelDecoded.UpdatedAt.Format(time.RFC3339))
 }
 
@@ -70,6 +72,7 @@ func TestCodec_DecodeReturnsErrorForInvalidUpdatedAt(t *testing.T) {
 		UpdateAuthor: "vasia pupkin",
 		Description:  "new major version has been released",
 		TgChatIds:    []int64{10, 11, 12},
+		Priority:     bot.Medium,
 	}
 	jsonEncoded, err := json.Marshal(badUpdate)
 	require.NoError(t, err)

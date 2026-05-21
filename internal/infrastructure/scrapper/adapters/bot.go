@@ -89,6 +89,7 @@ func (b *BotAdapter) httpNotify(
 		Title:        event.UpdateName,
 		UpdateAuthor: event.UpdateAuthor,
 		UpdatedAt:    event.UpdatedAt.Format(time.RFC3339),
+		Priority:     bot.LinkUpdatePriority(event.Priority.String()),
 	}
 	return b.retrier.Do(
 		func() error {
@@ -129,6 +130,7 @@ func (b *BotAdapter) grpcNotify(
 				UpdatedAt:    event.UpdatedAt.Format(time.RFC3339),
 				Description:  event.Description,
 				TgChatIds:    event.ChatIDs,
+				Priority:     bp.Priority(event.Priority.ToProtobufPriority()),
 			})
 			if err != nil {
 				statusCode := status.Code(err)

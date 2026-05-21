@@ -47,6 +47,7 @@ func toModelOutboxNotifications(
 			UpdateName:   updateEvent.Title,
 			UpdateAuthor: updateEvent.UpdateAuthor,
 			Description:  updateEvent.Description,
+			Priority:     model.PriorityFromString(string(updateEvent.Priority)),
 		}
 		ret[i] = model.OutboxLinkUpdateEvent{
 			ID:     n.ID,

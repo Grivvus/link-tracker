@@ -10,6 +10,34 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent"
 )
 
+type Prioritizer interface {
+	Prioritize(model.LinkUpdatedEvent) model.Priority
+}
+
+type prioritizer struct {
+	settings agent.AgentSettings
+}
+
+func NewPrioritizer(s agent.AgentSettings) Prioritizer {
+	return prioritizer{settings: s}
+}
+
+func (p prioritizer) Prioritize(update model.LinkUpdatedEvent) model.Priority {
+	for _, hkw := range p.settings.Prioritization.HighKeywords {
+		if strings.Contains(update.Description, hkw) {
+			return model.PriorityHigh
+		}
+	}
+
+	for _, lkw := range p.settings.Prioritization.LowKeywords {
+		if strings.Contains(update.Description, lkw) {
+			return model.PriorityLow
+		}
+	}
+
+	return model.PriorityMedium
+}
+
 type UpdateFilter interface {
 	Allow(model.LinkUpdatedEvent) bool
 }
@@ -41,6 +69,7 @@ func NewUpdateFilter(settings agent.AgentSettings) UpdateFilter {
 
 type EventUpdateProcessorUseCase struct {
 	filter                 UpdateFilter
+	prioritizer            Prioritizer
 	summarizer             ports.Summarizer
 	publisher              ports.ProcessedUpdatePublisher
 	summarizationThreshold uint
@@ -48,12 +77,14 @@ type EventUpdateProcessorUseCase struct {
 
 func NewEventUpdateProcessorUseCase(
 	filter UpdateFilter, summarizer ports.Summarizer,
+	prioritizer Prioritizer,
 	publisher ports.ProcessedUpdatePublisher,
 	summarizationThreshold uint,
 ) EventUpdateProcessorUseCase {
 	return EventUpdateProcessorUseCase{
 		filter:                 filter,
 		summarizer:             summarizer,
+		prioritizer:            prioritizer,
 		publisher:              publisher,
 		summarizationThreshold: summarizationThreshold,
 	}
@@ -65,6 +96,8 @@ func (uc EventUpdateProcessorUseCase) Process(
 	if !uc.filter.Allow(updateEvent) {
 		return nil
 	}
+
+	updateEvent.Priority = uc.prioritizer.Prioritize(updateEvent)
 
 	if uc.shouldSummarize(updateEvent) {
 		var err error

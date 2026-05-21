@@ -46,6 +46,7 @@ func (serv *BotServer) PostUpdates(w http.ResponseWriter, r *http.Request) {
 		UpdateAuthor: updates.UpdateAuthor,
 		UpdatedAt:    updatedAt,
 		UpdateName:   updates.Title,
+		Priority:     model.PriorityFromString(string(updates.Priority)),
 	})
 	if err != nil {
 		if errors.Is(err, ports.ErrBadParams) {

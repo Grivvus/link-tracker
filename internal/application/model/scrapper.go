@@ -7,6 +7,66 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 )
 
+type Priority int
+
+const (
+	PriorityLow    Priority = iota - 1 // -1
+	PriorityMedium                     // 0 - default value
+	PriorityHigh                       // 1
+)
+
+func (p Priority) String() string {
+	switch p {
+	case PriorityLow:
+		return "Low"
+	case PriorityMedium:
+		return "Medium"
+	case PriorityHigh:
+		return "High"
+	default:
+		return "Unknwown priority"
+	}
+}
+
+func (p Priority) ToProtobufPriority() int32 {
+	switch p {
+	case PriorityMedium:
+		return 0
+	case PriorityHigh:
+		return 1
+	case PriorityLow:
+		return 2
+	default:
+		return 0
+	}
+}
+
+func PriorityFromProtobugPriority(pbPriority int32) Priority {
+	switch pbPriority {
+	case 0:
+		return PriorityMedium
+	case 1:
+		return PriorityHigh
+	case 2:
+		return PriorityLow
+	default:
+		return PriorityMedium // as a default fallback
+	}
+}
+
+func PriorityFromString(p string) Priority {
+	switch p {
+	case "Low":
+		return PriorityLow
+	case "Medium":
+		return PriorityMedium
+	case "High":
+		return PriorityHigh
+	default:
+		return PriorityMedium // as a default fallback
+	}
+}
+
 type TrackLinkCmd struct {
 	ChatID int64
 	RawURL string
@@ -35,6 +95,7 @@ type LinkUpdatedEvent struct {
 	UpdateName   string
 	UpdateAuthor string
 	Description  string
+	Priority     Priority
 	ChatIDs      []int64
 }
 
@@ -47,6 +108,7 @@ func (upd LinkUpdatedEvent) Marshal() ([]byte, error) {
 		TgChatIds:    upd.ChatIDs,
 		UpdatedAt:    upd.UpdatedAt.Format(time.RFC3339),
 		Url:          upd.RawURL,
+		Priority:     bot.LinkUpdatePriority(upd.Priority.String()),
 	}
 	return json.Marshal(updateDTO)
 }
