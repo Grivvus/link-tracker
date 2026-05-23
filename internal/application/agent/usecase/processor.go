@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -89,12 +90,73 @@ func (uc EventUpdateProcessorUseCase) Process(
 	ctx context.Context, updateEvent ports.ReceivedEvent,
 ) error {
 	if !uc.filter.Allow(updateEvent.Event) {
-		return nil
+		return updateEvent.MarkProcessed(ctx)
 	}
 
 	updateEvent.Event.Priority = uc.prioritizer.Prioritize(updateEvent.Event)
+	if len(updateEvent.Event.ChatIDs) == 0 {
+		return updateEvent.MarkProcessed(ctx)
+	}
+	receipt := newFanoutTracker(
+		len(updateEvent.Event.ChatIDs),
+		updateEvent.MarkProcessed,
+		updateEvent.MarkFailed,
+	)
 	for _, chatID := range updateEvent.Event.ChatIDs {
-		go uc.grouper.Add(ctx, updateEvent, chatID)
+		eventForChat := updateEvent
+		eventForChat.Event.ChatIDs = []int64{chatID}
+		eventForChat.MarkProcessed = receipt.MarkProcessed
+		eventForChat.MarkFailed = receipt.MarkFailed
+		uc.grouper.Add(ctx, eventForChat, chatID)
 	}
 	return nil
+}
+
+type fanoutTracker struct {
+	mu            sync.Mutex
+	remaining     int
+	done          bool
+	markProcessed func(context.Context) error
+	markFailed    func(context.Context, error) error
+}
+
+func newFanoutTracker(
+	remaining int,
+	markProcessed func(context.Context) error,
+	markFailed func(context.Context, error) error,
+) *fanoutTracker {
+	return &fanoutTracker{
+		remaining:     remaining,
+		markProcessed: markProcessed,
+		markFailed:    markFailed,
+	}
+}
+
+func (r *fanoutTracker) MarkProcessed(ctx context.Context) error {
+	r.mu.Lock()
+	if r.done {
+		r.mu.Unlock()
+		return nil
+	}
+	r.remaining--
+	if r.remaining > 0 {
+		r.mu.Unlock()
+		return nil
+	}
+	r.done = true
+	markProcessed := r.markProcessed
+	r.mu.Unlock()
+	return markProcessed(ctx)
+}
+
+func (r *fanoutTracker) MarkFailed(ctx context.Context, err error) error {
+	r.mu.Lock()
+	if r.done {
+		r.mu.Unlock()
+		return nil
+	}
+	r.done = true
+	markFailed := r.markFailed
+	r.mu.Unlock()
+	return markFailed(ctx, err)
 }

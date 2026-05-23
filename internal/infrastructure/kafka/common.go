@@ -37,7 +37,15 @@ type eventsHandlerAgent struct {
 }
 
 func (e eventsHandlerAgent) Handle(ctx context.Context, event model.LinkUpdatedEvent) error {
-	return e.processor.Process(ctx, event)
+	return e.processor.Process(ctx, ports.ReceivedEvent{
+		Event: event,
+		MarkProcessed: func(context.Context) error {
+			return nil
+		},
+		MarkFailed: func(context.Context, error) error {
+			return nil
+		},
+	})
 }
 
 func HandlerFromEventsProcessor(processor usecase.EventUpdateProcessorUseCase) EventsHandler {

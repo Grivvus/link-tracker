@@ -8,60 +8,68 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/agent/usecase"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent"
 )
 
-type fakeProcessedUpdatePublisher struct {
-	events []model.LinkUpdatedEvent
-	err    error
+type fakeGrouperCall struct {
+	event  ports.ReceivedEvent
+	chatID int64
 }
 
-func (f *fakeProcessedUpdatePublisher) PublishProcessedEvent(
-	_ context.Context, event model.LinkUpdatedEvent,
-) error {
-	if f.err != nil {
-		return f.err
-	}
-	f.events = append(f.events, event)
+type fakeGrouper struct {
+	calls []fakeGrouperCall
+}
+
+func (f *fakeGrouper) Add(_ context.Context, event ports.ReceivedEvent, chatID int64) {
+	f.calls = append(f.calls, fakeGrouperCall{
+		event:  event,
+		chatID: chatID,
+	})
+}
+
+func (f *fakeGrouper) Flush(context.Context) error {
 	return nil
 }
 
-type fakeSummarizer struct {
-	calls     int
-	summarize func(model.LinkUpdatedEvent) model.LinkUpdatedEvent
-	err       error
+type testReceipt struct {
+	processed int
+	failed    int
+	failCause error
 }
 
-func (f *fakeSummarizer) Summarize(
-	_ context.Context, event model.LinkUpdatedEvent,
-) (model.LinkUpdatedEvent, error) {
-	f.calls++
-	if f.err != nil {
-		return model.LinkUpdatedEvent{}, f.err
+func (r *testReceipt) receivedEvent(event model.LinkUpdatedEvent) ports.ReceivedEvent {
+	return ports.ReceivedEvent{
+		Event: event,
+		MarkProcessed: func(context.Context) error {
+			r.processed++
+			return nil
+		},
+		MarkFailed: func(_ context.Context, err error) error {
+			r.failed++
+			r.failCause = err
+			return nil
+		},
 	}
-	if f.summarize != nil {
-		return f.summarize(event), nil
-	}
-	return event, nil
 }
 
 func TestEventUpdateProcessorUseCase_Process_FiltersByStopWords(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		description   string
-		wantPublished bool
+		name        string
+		description string
+		wantGrouped bool
 	}{
 		{
-			name:          "filters update containing stop word",
-			description:   "text with blocked word",
-			wantPublished: false,
+			name:        "filters update containing stop word",
+			description: "text with blocked word",
+			wantGrouped: false,
 		},
 		{
-			name:          "passes update without stop words",
-			description:   "text without forbidden words",
-			wantPublished: true,
+			name:        "passes update without stop words",
+			description: "text without forbidden words",
+			wantGrouped: true,
 		},
 	}
 
@@ -74,20 +82,20 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByStopWords(t *testing.T) {
 			event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 				event.Description = tc.description
 			})
-			summarizer := &fakeSummarizer{}
-			publisher := &fakeProcessedUpdatePublisher{}
-			processor := newTestProcessor(settings, summarizer, publisher)
+			grouper := &fakeGrouper{}
+			processor := newTestProcessor(settings, grouper)
+			receipt := &testReceipt{}
 
-			err := processor.Process(context.Background(), event)
+			err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 			require.NoError(t, err)
-			if tc.wantPublished {
-				require.Equal(t, 1, summarizer.calls)
-				require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
+			if tc.wantGrouped {
+				require.Zero(t, receipt.processed)
+				requireGroupedByChats(t, event, grouper.calls)
 				return
 			}
-			require.Zero(t, summarizer.calls)
-			require.Empty(t, publisher.events)
+			require.Equal(t, 1, receipt.processed)
+			require.Empty(t, grouper.calls)
 		})
 	}
 }
@@ -96,19 +104,19 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByExcludedAuthors(t *testing
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		author        string
-		wantPublished bool
+		name        string
+		author      string
+		wantGrouped bool
 	}{
 		{
-			name:          "filters update from excluded author",
-			author:        "ignored-author",
-			wantPublished: false,
+			name:        "filters update from excluded author",
+			author:      "ignored-author",
+			wantGrouped: false,
 		},
 		{
-			name:          "passes update from allowed author",
-			author:        "allowed-author",
-			wantPublished: true,
+			name:        "passes update from allowed author",
+			author:      "allowed-author",
+			wantGrouped: true,
 		},
 	}
 
@@ -121,20 +129,20 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByExcludedAuthors(t *testing
 			event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 				event.UpdateAuthor = tc.author
 			})
-			summarizer := &fakeSummarizer{}
-			publisher := &fakeProcessedUpdatePublisher{}
-			processor := newTestProcessor(settings, summarizer, publisher)
+			grouper := &fakeGrouper{}
+			processor := newTestProcessor(settings, grouper)
+			receipt := &testReceipt{}
 
-			err := processor.Process(context.Background(), event)
+			err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 			require.NoError(t, err)
-			if tc.wantPublished {
-				require.Equal(t, 1, summarizer.calls)
-				require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
+			if tc.wantGrouped {
+				require.Zero(t, receipt.processed)
+				requireGroupedByChats(t, event, grouper.calls)
 				return
 			}
-			require.Zero(t, summarizer.calls)
-			require.Empty(t, publisher.events)
+			require.Equal(t, 1, receipt.processed)
+			require.Empty(t, grouper.calls)
 		})
 	}
 }
@@ -143,19 +151,19 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByMinimumDescriptionLength(t
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		description   string
-		wantPublished bool
+		name        string
+		description string
+		wantGrouped bool
 	}{
 		{
-			name:          "filters update shorter than minimum length",
-			description:   "too short",
-			wantPublished: false,
+			name:        "filters update shorter than minimum length",
+			description: "too short",
+			wantGrouped: false,
 		},
 		{
-			name:          "passes update matching minimum length",
-			description:   "description long enough",
-			wantPublished: true,
+			name:        "passes update matching minimum length",
+			description: "description long enough",
+			wantGrouped: true,
 		},
 	}
 
@@ -168,40 +176,38 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByMinimumDescriptionLength(t
 			event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 				event.Description = tc.description
 			})
-			summarizer := &fakeSummarizer{}
-			publisher := &fakeProcessedUpdatePublisher{}
-			processor := newTestProcessor(settings, summarizer, publisher)
+			grouper := &fakeGrouper{}
+			processor := newTestProcessor(settings, grouper)
+			receipt := &testReceipt{}
 
-			err := processor.Process(context.Background(), event)
+			err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 			require.NoError(t, err)
-			if tc.wantPublished {
-				require.Equal(t, 1, summarizer.calls)
-				require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
+			if tc.wantGrouped {
+				require.Zero(t, receipt.processed)
+				requireGroupedByChats(t, event, grouper.calls)
 				return
 			}
-			require.Zero(t, summarizer.calls)
-			require.Empty(t, publisher.events)
+			require.Equal(t, 1, receipt.processed)
+			require.Empty(t, grouper.calls)
 		})
 	}
 }
 
-func TestEventUpdateProcessorUseCase_Process_PublishesValidUpdate(t *testing.T) {
+func TestEventUpdateProcessorUseCase_Process_GroupsValidUpdateByChats(t *testing.T) {
 	t.Parallel()
 
-	settings := testAgentSettings(func(settings *agent.AgentSettings) {
-		settings.Summarization.Threshold = 1000
-	})
+	settings := testAgentSettings()
 	event := testLinkUpdatedEvent()
-	summarizer := &fakeSummarizer{}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
+	grouper := &fakeGrouper{}
+	processor := newTestProcessor(settings, grouper)
+	receipt := &testReceipt{}
 
-	err := processor.Process(context.Background(), event)
+	err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 	require.NoError(t, err)
-	require.Equal(t, 1, summarizer.calls)
-	require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
+	require.Zero(t, receipt.processed)
+	requireGroupedByChats(t, event, grouper.calls)
 }
 
 func TestEventUpdateProcessorUseCase_Process_AssignsHighPriority(t *testing.T) {
@@ -214,15 +220,14 @@ func TestEventUpdateProcessorUseCase_Process_AssignsHighPriority(t *testing.T) {
 	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 		event.Description = "critical production issue"
 	})
-	summarizer := &fakeSummarizer{}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
+	grouper := &fakeGrouper{}
+	processor := newTestProcessor(settings, grouper)
+	receipt := &testReceipt{}
 
-	err := processor.Process(context.Background(), event)
+	err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 	require.NoError(t, err)
-	require.Len(t, publisher.events, 1)
-	require.Equal(t, model.PriorityHigh, publisher.events[0].Priority)
+	requireGroupedWithPriority(t, model.PriorityHigh, grouper.calls)
 }
 
 func TestEventUpdateProcessorUseCase_Process_AssignsLowPriority(t *testing.T) {
@@ -235,15 +240,14 @@ func TestEventUpdateProcessorUseCase_Process_AssignsLowPriority(t *testing.T) {
 	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 		event.Description = "minor docs update"
 	})
-	summarizer := &fakeSummarizer{}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
+	grouper := &fakeGrouper{}
+	processor := newTestProcessor(settings, grouper)
+	receipt := &testReceipt{}
 
-	err := processor.Process(context.Background(), event)
+	err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 	require.NoError(t, err)
-	require.Len(t, publisher.events, 1)
-	require.Equal(t, model.PriorityLow, publisher.events[0].Priority)
+	requireGroupedWithPriority(t, model.PriorityLow, grouper.calls)
 }
 
 func TestEventUpdateProcessorUseCase_Process_AssignsMediumPriorityByDefault(t *testing.T) {
@@ -256,15 +260,14 @@ func TestEventUpdateProcessorUseCase_Process_AssignsMediumPriorityByDefault(t *t
 	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 		event.Description = "regular update"
 	})
-	summarizer := &fakeSummarizer{}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
+	grouper := &fakeGrouper{}
+	processor := newTestProcessor(settings, grouper)
+	receipt := &testReceipt{}
 
-	err := processor.Process(context.Background(), event)
+	err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 	require.NoError(t, err)
-	require.Len(t, publisher.events, 1)
-	require.Equal(t, model.PriorityMedium, publisher.events[0].Priority)
+	requireGroupedWithPriority(t, model.PriorityMedium, grouper.calls)
 }
 
 func TestEventUpdateProcessorUseCase_Process_AssignsHighPriorityWhenHighAndLowKeywordsMatch(t *testing.T) {
@@ -277,82 +280,86 @@ func TestEventUpdateProcessorUseCase_Process_AssignsHighPriorityWhenHighAndLowKe
 	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
 		event.Description = "critical minor update"
 	})
-	summarizer := &fakeSummarizer{}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
+	grouper := &fakeGrouper{}
+	processor := newTestProcessor(settings, grouper)
+	receipt := &testReceipt{}
 
-	err := processor.Process(context.Background(), event)
-
-	require.NoError(t, err)
-	require.Len(t, publisher.events, 1)
-	require.Equal(t, model.PriorityHigh, publisher.events[0].Priority)
-}
-
-func TestEventUpdateProcessorUseCase_Process_SummarizesLongText(t *testing.T) {
-	settings := testAgentSettings(func(settings *agent.AgentSettings) {
-		settings.Summarization.Threshold = 10
-	})
-	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
-		event.Description = "this text is longer than threshold"
-	})
-	summarizer := &fakeSummarizer{
-		summarize: func(event model.LinkUpdatedEvent) model.LinkUpdatedEvent {
-			event.Description = "short summary"
-			return event
-		},
-	}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
-
-	err := processor.Process(context.Background(), event)
+	err := processor.Process(context.Background(), receipt.receivedEvent(event))
 
 	require.NoError(t, err)
-	require.Equal(t, 1, summarizer.calls)
-	require.Len(t, publisher.events, 1)
-	require.Equal(t, "short summary", publisher.events[0].Description)
-	require.NotEqual(t, event.Description, publisher.events[0].Description)
+	requireGroupedWithPriority(t, model.PriorityHigh, grouper.calls)
 }
 
-func TestEventUpdateProcessorUseCase_Process_PassesShortTextWithoutSummarization(t *testing.T) {
+func TestEventUpdateProcessorUseCase_Process_MarksOriginalProcessedAfterAllChatGroupsProcessed(t *testing.T) {
 	t.Parallel()
 
-	settings := testAgentSettings(func(settings *agent.AgentSettings) {
-		settings.Summarization.Threshold = 1000
-	})
+	settings := testAgentSettings()
 	event := testLinkUpdatedEvent(func(event *model.LinkUpdatedEvent) {
-		event.Description = "short text"
+		event.ChatIDs = []int64{101, 202, 303}
 	})
-	summarizer := &fakeSummarizer{}
-	publisher := &fakeProcessedUpdatePublisher{}
-	processor := newTestProcessor(settings, summarizer, publisher)
+	grouper := &fakeGrouper{}
+	processor := newTestProcessor(settings, grouper)
+	receipt := &testReceipt{}
 
-	err := processor.Process(context.Background(), event)
-
+	err := processor.Process(context.Background(), receipt.receivedEvent(event))
 	require.NoError(t, err)
-	require.Equal(t, 1, summarizer.calls)
-	require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
+	require.Len(t, grouper.calls, 3)
+
+	require.NoError(t, grouper.calls[0].event.MarkProcessed(context.Background()))
+	require.Zero(t, receipt.processed)
+	require.NoError(t, grouper.calls[1].event.MarkProcessed(context.Background()))
+	require.Zero(t, receipt.processed)
+	require.NoError(t, grouper.calls[2].event.MarkProcessed(context.Background()))
+	require.Equal(t, 1, receipt.processed)
+
+	require.NoError(t, grouper.calls[0].event.MarkProcessed(context.Background()))
+	require.Equal(t, 1, receipt.processed)
 }
 
 func newTestProcessor(
 	settings agent.AgentSettings,
-	summarizer *fakeSummarizer,
-	publisher *fakeProcessedUpdatePublisher,
+	grouper usecase.UpdateGrouper,
 ) usecase.EventUpdateProcessorUseCase {
 	return usecase.NewEventUpdateProcessorUseCase(
 		usecase.NewUpdateFilter(settings),
-		summarizer,
 		usecase.NewPrioritizer(settings),
-		publisher,
+		grouper,
 	)
+}
+
+func requireGroupedByChats(
+	t *testing.T,
+	expected model.LinkUpdatedEvent,
+	actual []fakeGrouperCall,
+) {
+	t.Helper()
+
+	require.Len(t, actual, len(expected.ChatIDs))
+	for i, chatID := range expected.ChatIDs {
+		require.Equal(t, chatID, actual[i].chatID)
+		expectedForChat := expected
+		expectedForChat.ChatIDs = []int64{chatID}
+		require.Equal(t, expectedForChat, actual[i].event.Event)
+	}
+}
+
+func requireGroupedWithPriority(
+	t *testing.T,
+	expected model.Priority,
+	actual []fakeGrouperCall,
+) {
+	t.Helper()
+
+	require.NotEmpty(t, actual)
+	for _, call := range actual {
+		require.Equal(t, expected, call.event.Event.Priority)
+	}
 }
 
 func testAgentSettings(opts ...func(*agent.AgentSettings)) agent.AgentSettings {
 	settings := agent.AgentSettings{
 		Filtering: agent.Filtering{
 			MinLength: 1,
-		},
-		Summarization: agent.Summarization{
-			Threshold: 1000,
 		},
 	}
 	for _, opt := range opts {

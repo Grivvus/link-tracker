@@ -54,9 +54,15 @@ var agentMsg = model.LinkUpdatedEvent{
 type noopSummarizer struct{}
 
 func (noopSummarizer) Summarize(
-	_ context.Context, event model.LinkUpdatedEvent, _ uint,
+	_ context.Context, event model.LinkUpdatedEvent,
 ) (model.LinkUpdatedEvent, error) {
 	return event, nil
+}
+
+type staticMerger struct{}
+
+func (staticMerger) Merge(int64, []model.LinkUpdatedEvent) model.LinkUpdatedEvent {
+	return agentMsg
 }
 
 type RawEventsReaderIntegrationSuite struct {
@@ -259,12 +265,18 @@ func (s *RawEventsReaderIntegrationSuite) newRawEventsReader() *agentKafka.RawEv
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := adapters.NewProcessedUpdatePublisher(logger, s.processedWriter, s.avroCodec)
+	grouper := usecase.NewInMemoryUpdateGrouper(
+		context.Background(),
+		logger,
+		time.Nanosecond,
+		staticMerger{},
+		noopSummarizer{},
+		publisher,
+	)
 	processor := usecase.NewEventUpdateProcessorUseCase(
 		usecase.NewUpdateFilter(settings),
-		noopSummarizer{},
 		usecase.NewPrioritizer(settings),
-		publisher,
-		settings.Summarization.Threshold,
+		grouper,
 	)
 	return agentKafka.NewRawEventsReader(*commonKafka.NewEventsReader(
 		logger,

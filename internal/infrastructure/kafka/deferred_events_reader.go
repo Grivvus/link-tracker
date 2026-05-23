@@ -47,6 +47,7 @@ func NewDeferredEventsReader(
 func (r *DeferredEventsReader) Start(ctx context.Context) (<-chan ports.ReceivedEvent, error) {
 	ch := make(chan ports.ReceivedEvent)
 	go func() {
+		defer close(ch)
 		for {
 			select {
 			case <-ctx.Done():
@@ -63,11 +64,12 @@ func (r *DeferredEventsReader) Start(ctx context.Context) (<-chan ports.Received
 				updateEvent, err := r.avroCodec.Decode(msg.Value)
 				if err != nil {
 					r.logger.Error("can't handle message", "msg", msg, "err", err)
-					msg.Topic = "" // reset topic before write to dlq
-					r.dlqWriter.WriteMessages(ctx, msg)
+					if markErr := r.offsetTracker.MarkFailed(ctx, msg, err); markErr != nil {
+						r.logger.Error("can't mark message as failed", "err", markErr)
+					}
 					continue
 				}
-				ch <- ports.ReceivedEvent{
+				receivedEvent := ports.ReceivedEvent{
 					Event: updateEvent,
 					MarkProcessed: func(ctx context.Context) error {
 						return r.offsetTracker.MarkProcessed(ctx, msg)
@@ -75,6 +77,11 @@ func (r *DeferredEventsReader) Start(ctx context.Context) (<-chan ports.Received
 					MarkFailed: func(ctx context.Context, err error) error {
 						return r.offsetTracker.MarkFailed(ctx, msg, err)
 					},
+				}
+				select {
+				case ch <- receivedEvent:
+				case <-ctx.Done():
+					return
 				}
 			}
 		}

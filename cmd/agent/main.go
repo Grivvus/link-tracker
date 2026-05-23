@@ -11,6 +11,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/agent/usecase"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent/adapters"
@@ -29,24 +30,47 @@ type agentRuntime struct {
 	rawEventsReader       *kafka.Reader
 	processedEventsWriter *kafka.Writer
 	dlqWriter             *kafka.Writer
-	eventsReader          *agentKafka.RawEventsReader
+	eventsReader          ports.ReceivedEventsReader
+	eventsProcessor       usecase.EventUpdateProcessorUseCase
+	grouper               usecase.UpdateGrouper
 }
 
 func (app *agentRuntime) run(ctx context.Context) error {
-	app.eventsReader.Start(ctx)
-	return nil
+	events, err := app.eventsReader.Start(ctx)
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case event, ok := <-events:
+			if !ok {
+				return nil
+			}
+			if err := app.eventsProcessor.Process(ctx, event); err != nil {
+				app.logger.Error("can't process received event", "err", err)
+				if markErr := event.MarkFailed(ctx, err); markErr != nil {
+					return markErr
+				}
+			}
+		}
+	}
 }
 
 func (app *agentRuntime) Close(ctx context.Context) error {
 	var err error
+	if app.grouper != nil {
+		err = errors.Join(err, app.grouper.Flush(ctx))
+	}
 	if app.dlqWriter != nil {
-		errors.Join(err, app.dlqWriter.Close())
+		err = errors.Join(err, app.dlqWriter.Close())
 	}
 	if app.rawEventsReader != nil {
-		errors.Join(err, app.rawEventsReader.Close())
+		err = errors.Join(err, app.rawEventsReader.Close())
 	}
 	if app.processedEventsWriter != nil {
-		errors.Join(err, app.processedEventsWriter.Close())
+		err = errors.Join(err, app.processedEventsWriter.Close())
 	}
 	return err
 }
@@ -118,13 +142,27 @@ func newAgentRuntime(
 		grouper,
 	)
 
-	agentKafkaReader := agentKafka.NewRawEventsReader(*commonKafka.NewEventsReader(
-		logger, commonKafka.HandlerFromEventsProcessor(eventsProcessor),
-		rawEventsReader, dlqWriter, codec, rcfg.RetryPolicy))
+	offsetTracker := commonKafka.NewPartitionOffsetTracker(
+		logger,
+		rawEventsReader,
+		dlqWriter,
+		codec,
+	)
+	deferredReader := commonKafka.NewDeferredEventsReader(
+		logger,
+		rawEventsReader,
+		dlqWriter,
+		codec,
+		offsetTracker,
+		rcfg.RetryPolicy,
+	)
+	agentKafkaReader := agentKafka.NewDeferredRawEventsReader(deferredReader)
 	app.processedEventsWriter = processedEventsWriter
 	app.dlqWriter = dlqWriter
 	app.rawEventsReader = rawEventsReader
 	app.eventsReader = agentKafkaReader
+	app.eventsProcessor = eventsProcessor
+	app.grouper = grouper
 	return app, err
 
 }
