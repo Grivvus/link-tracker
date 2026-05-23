@@ -183,9 +183,9 @@ func (m DefaultUpdateMerger) Merge(chatID int64, events []model.LinkUpdatedEvent
 			maxUpdTime = event.UpdatedAt
 		}
 		descriptionBuilder.WriteString(fmt.Sprintf("%d: %s\n", i, event.Description))
-		urlBuilder.WriteString(fmt.Sprintf("%s.", event.RawURL))
-		authorsBuilder.WriteString(fmt.Sprintf("%s;", event.UpdateAuthor))
-		nameBuilder.WriteString(fmt.Sprintf("%s;", event.UpdateName))
+		urlBuilder.WriteString(fmt.Sprintf("%d: %s ||", i, event.RawURL))
+		authorsBuilder.WriteString(fmt.Sprintf("%d: %s ||", i, event.UpdateAuthor))
+		nameBuilder.WriteString(fmt.Sprintf("%d: %s ||", i, event.UpdateName))
 	}
 
 	return model.LinkUpdatedEvent{
