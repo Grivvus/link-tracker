@@ -56,3 +56,11 @@ func ExecuteWithBreaker[T any](
 
 	return result, err
 }
+
+func Map[T any, E any](in []T, transformer func(T) E) []E {
+	out := make([]E, len(in))
+	for i, elem := range in {
+		out[i] = transformer(elem)
+	}
+	return out
+}

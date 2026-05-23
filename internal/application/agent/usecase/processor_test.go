@@ -33,7 +33,7 @@ type fakeSummarizer struct {
 }
 
 func (f *fakeSummarizer) Summarize(
-	_ context.Context, event model.LinkUpdatedEvent, treshold uint,
+	_ context.Context, event model.LinkUpdatedEvent,
 ) (model.LinkUpdatedEvent, error) {
 	f.calls++
 	if f.err != nil {
@@ -42,7 +42,6 @@ func (f *fakeSummarizer) Summarize(
 	if f.summarize != nil {
 		return f.summarize(event), nil
 	}
-	event.Description = "summarized"
 	return event, nil
 }
 
@@ -82,11 +81,12 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByStopWords(t *testing.T) {
 			err := processor.Process(context.Background(), event)
 
 			require.NoError(t, err)
-			require.Zero(t, summarizer.calls)
 			if tc.wantPublished {
+				require.Equal(t, 1, summarizer.calls)
 				require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
 				return
 			}
+			require.Zero(t, summarizer.calls)
 			require.Empty(t, publisher.events)
 		})
 	}
@@ -128,11 +128,12 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByExcludedAuthors(t *testing
 			err := processor.Process(context.Background(), event)
 
 			require.NoError(t, err)
-			require.Zero(t, summarizer.calls)
 			if tc.wantPublished {
+				require.Equal(t, 1, summarizer.calls)
 				require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
 				return
 			}
+			require.Zero(t, summarizer.calls)
 			require.Empty(t, publisher.events)
 		})
 	}
@@ -174,11 +175,12 @@ func TestEventUpdateProcessorUseCase_Process_FiltersByMinimumDescriptionLength(t
 			err := processor.Process(context.Background(), event)
 
 			require.NoError(t, err)
-			require.Zero(t, summarizer.calls)
 			if tc.wantPublished {
+				require.Equal(t, 1, summarizer.calls)
 				require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
 				return
 			}
+			require.Zero(t, summarizer.calls)
 			require.Empty(t, publisher.events)
 		})
 	}
@@ -198,7 +200,7 @@ func TestEventUpdateProcessorUseCase_Process_PublishesValidUpdate(t *testing.T) 
 	err := processor.Process(context.Background(), event)
 
 	require.NoError(t, err)
-	require.Zero(t, summarizer.calls)
+	require.Equal(t, 1, summarizer.calls)
 	require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
 }
 
@@ -327,7 +329,7 @@ func TestEventUpdateProcessorUseCase_Process_PassesShortTextWithoutSummarization
 	err := processor.Process(context.Background(), event)
 
 	require.NoError(t, err)
-	require.Zero(t, summarizer.calls)
+	require.Equal(t, 1, summarizer.calls)
 	require.Equal(t, []model.LinkUpdatedEvent{event}, publisher.events)
 }
 
@@ -341,7 +343,6 @@ func newTestProcessor(
 		summarizer,
 		usecase.NewPrioritizer(settings),
 		publisher,
-		settings.Summarization.Threshold,
 	)
 }
 

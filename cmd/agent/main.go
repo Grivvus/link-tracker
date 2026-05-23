@@ -74,7 +74,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	app, err := newAgentRuntime(config, rcfg, logger)
+	app, err := newAgentRuntime(ctx, config, rcfg, logger)
 	if err != nil {
 		return err
 	}
@@ -89,6 +89,7 @@ func run(logger *slog.Logger) error {
 }
 
 func newAgentRuntime(
+	ctx context.Context,
 	cfg infrastructure.Config,
 	rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (app agentRuntime, err error) {
@@ -102,14 +103,19 @@ func newAgentRuntime(
 		return agentRuntime{}, err
 	}
 	publisher := adapters.NewProcessedUpdatePublisher(logger, processedEventsWriter, codec)
-	summarizer := adapters.NewDummySummarizer(logger)
+	summarizer := adapters.NewDummySummarizer(logger, agentSettings.Summarization.Threshold)
+	grouper := usecase.NewInMemoryUpdateGrouper(
+		ctx, logger,
+		time.Duration(agentSettings.Grouping.WindowMS)*time.Millisecond,
+		usecase.NewDefaultUpdateMerger(),
+		summarizer,
+		publisher,
+	)
 
 	eventsProcessor := usecase.NewEventUpdateProcessorUseCase(
 		usecase.NewUpdateFilter(agentSettings),
-		summarizer,
 		usecase.NewPrioritizer(agentSettings),
-		publisher,
-		agentSettings.Summarization.Threshold,
+		grouper,
 	)
 
 	agentKafkaReader := agentKafka.NewRawEventsReader(*commonKafka.NewEventsReader(

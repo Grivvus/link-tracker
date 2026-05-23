@@ -11,6 +11,6 @@ var SummarizationError = errors.New("can't make summarization")
 
 type Summarizer interface {
 	Summarize(
-		context.Context, model.LinkUpdatedEvent, uint,
+		context.Context, model.LinkUpdatedEvent,
 	) (model.LinkUpdatedEvent, error)
 }

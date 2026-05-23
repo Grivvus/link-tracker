@@ -68,48 +68,33 @@ func NewUpdateFilter(settings agent.AgentSettings) UpdateFilter {
 }
 
 type EventUpdateProcessorUseCase struct {
-	filter                 UpdateFilter
-	prioritizer            Prioritizer
-	summarizer             ports.Summarizer
-	publisher              ports.ProcessedUpdatePublisher
-	summarizationThreshold uint
+	filter      UpdateFilter
+	prioritizer Prioritizer
+	grouper     UpdateGrouper
 }
 
 func NewEventUpdateProcessorUseCase(
-	filter UpdateFilter, summarizer ports.Summarizer,
+	filter UpdateFilter,
 	prioritizer Prioritizer,
-	publisher ports.ProcessedUpdatePublisher,
-	summarizationThreshold uint,
+	grouper UpdateGrouper,
 ) EventUpdateProcessorUseCase {
 	return EventUpdateProcessorUseCase{
-		filter:                 filter,
-		summarizer:             summarizer,
-		prioritizer:            prioritizer,
-		publisher:              publisher,
-		summarizationThreshold: summarizationThreshold,
+		filter:      filter,
+		prioritizer: prioritizer,
+		grouper:     grouper,
 	}
 }
 
 func (uc EventUpdateProcessorUseCase) Process(
-	ctx context.Context, updateEvent model.LinkUpdatedEvent,
+	ctx context.Context, updateEvent ports.ReceivedEvent,
 ) error {
-	if !uc.filter.Allow(updateEvent) {
+	if !uc.filter.Allow(updateEvent.Event) {
 		return nil
 	}
 
-	updateEvent.Priority = uc.prioritizer.Prioritize(updateEvent)
-
-	if uc.shouldSummarize(updateEvent) {
-		var err error
-		updateEvent, err = uc.summarizer.Summarize(ctx, updateEvent, uc.summarizationThreshold)
-		if err != nil {
-			return err
-		}
+	updateEvent.Event.Priority = uc.prioritizer.Prioritize(updateEvent.Event)
+	for _, chatID := range updateEvent.Event.ChatIDs {
+		go uc.grouper.Add(ctx, updateEvent, chatID)
 	}
-
-	return uc.publisher.PublishProcessedEvent(ctx, updateEvent)
-}
-
-func (uc EventUpdateProcessorUseCase) shouldSummarize(updateEvent model.LinkUpdatedEvent) bool {
-	return len(updateEvent.Description) >= int(uc.summarizationThreshold)
+	return nil
 }

@@ -10,23 +10,27 @@ import (
 )
 
 type DummySummarizer struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	treshold uint
 }
 
-func NewDummySummarizer(logger *slog.Logger) ports.Summarizer {
+func NewDummySummarizer(logger *slog.Logger, treshold uint) ports.Summarizer {
 	return &DummySummarizer{
-		logger: logger,
+		logger:   logger,
+		treshold: treshold,
 	}
 }
 
 func (sum *DummySummarizer) Summarize(
 	ctx context.Context, updateEvent model.LinkUpdatedEvent,
-	treshold uint,
 ) (model.LinkUpdatedEvent, error) {
+	if len(updateEvent.Description) <= int(sum.treshold) {
+		return updateEvent, nil
+	}
 	var sb strings.Builder
 	sum.logger.Info("summarization was invoked")
 	sb.WriteString("Summarized message.")
-	sb.WriteString(updateEvent.Description[:treshold])
+	sb.WriteString(updateEvent.Description[:sum.treshold])
 	sb.WriteString("...")
 	return model.LinkUpdatedEvent{
 		LinkID:       updateEvent.LinkID,
