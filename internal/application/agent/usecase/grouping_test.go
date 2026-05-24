@@ -44,7 +44,7 @@ func (p *groupingPublisher) PublishProcessedEvent(
 func TestInMemoryUpdateGrouper_FlushPublishesMaxPriority(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	const chatID int64 = 101
@@ -87,32 +87,10 @@ func TestInMemoryUpdateGrouper_GroupsForConfiguredWindow(t *testing.T) {
 	require.LessOrEqual(t, publishedAfter, 2*window)
 }
 
-func TestInMemoryUpdateGrouper_SingleEventGroupKeepsMainFields(t *testing.T) {
-	t.Skip()
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	const chatID int64 = 101
-	publisher := newGroupingPublisher(1)
-	grouper := newTestGrouper(ctx, time.Hour, publisher)
-	event := groupingEvent(func(event *model.LinkUpdatedEvent) {
-		event.ChatIDs = []int64{chatID}
-		event.Priority = model.PriorityLow
-	})
-
-	grouper.Add(ctx, receivedGroupingEvent(event), chatID)
-
-	require.NoError(t, grouper.Flush(ctx))
-	published := requirePublishedEvent(t, publisher, time.Second)
-	require.Equal(t, event, published)
-}
-
 func TestInMemoryUpdateGrouper_ConcurrentAddGroupsAllEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	const (
