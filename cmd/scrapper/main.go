@@ -15,6 +15,9 @@ import (
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/segmentio/kafka-go"
 	"github.com/valkey-io/valkey-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
@@ -25,6 +28,7 @@ import (
 	botpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/httputils"
+	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
 	botapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
@@ -103,6 +107,7 @@ func newScrapperRuntime(
 	ctx context.Context, cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (*scrapperRuntime, error) {
 	var err error
+	metrics := appmetrics.New("scrapper")
 	limiter := httputils.NewRateLimiter(rcfg.RateLimiterRequestsPerSecond, rcfg.ReateLimiterMaxBurst)
 	app := &scrapperRuntime{
 		logger:   logger,
@@ -110,6 +115,7 @@ func newScrapperRuntime(
 		grpcServer: grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
 				limiter.UnaryServerInterceptor(),
+				metrics.UnaryServerInterceptor(),
 			)),
 	}
 	defer func() {
@@ -152,7 +158,10 @@ func newScrapperRuntime(
 	linksCache := cache.NewValkeyLinksCache(logger, vkClient, time.Duration(cfg.ValkeyTTLSeconds)*time.Second)
 	scrapperPort := adapters.NewScrapperCachedAdapter(logger, baseScrapperPort, linksCache)
 
-	app.httpServer = newScrapperHTTPServer(cfg, limiter, logger, scrapperPort)
+	app.httpServer, err = newScrapperHTTPServer(cfg, limiter, logger, scrapperPort, metrics)
+	if err != nil {
+		return nil, err
+	}
 	pb.RegisterScrapperServer(app.grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
 	app.scheduler, err = newScheduler(ctx, cfg, rcfg, logger, botPort, repos.outbox, repos.subscription)
@@ -279,7 +288,8 @@ func newBotPort(
 func newScrapperHTTPServer(
 	cfg infrastructure.Config, limiter *httputils.RateLimiter,
 	logger *slog.Logger, scrapperPort ports.ScrapperPort,
-) *http.Server {
+	metrics *appmetrics.Metrics,
+) (*http.Server, error) {
 	var httpServInterface scrapperapi.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
 
@@ -293,11 +303,27 @@ func newScrapperHTTPServer(
 
 	handler := scrapperapi.HandlerFromMux(httpServInterface, mux)
 	limitedHandler := limiter.Middleware(handler)
+	handlerWithMetrics := metrics.Middleware(limitedHandler)
+
+	reg := prometheus.NewRegistry()
+	err = reg.Register(collectors.NewGoCollector(
+		collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll),
+	))
+	if err != nil {
+		return nil, err
+	}
+	err = metrics.Register(reg)
+	if err != nil {
+		return nil, err
+	}
+	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	}))
 
 	return &http.Server{
 		Addr:    cfg.ServerURL,
-		Handler: limitedHandler,
-	}
+		Handler: handlerWithMetrics,
+	}, nil
 }
 
 func newScrapperHelpServer(cfg infrastructure.Config) (helpserv.HelpServ, error) {

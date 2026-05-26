@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "prometheus-bot"
+    static_configs:
+      - targets: ["bot:8000"]
+  - job_name: "prometheus-scrapper"
+    static_configs:
+      - targets: ["scrapper:8000"]

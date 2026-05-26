@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/segmentio/kafka-go"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
@@ -24,6 +27,7 @@ import (
 	scrapperpb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/httputils"
 	kafkaCommon "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
+	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
 	oapibot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	scrapperapi "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"google.golang.org/grpc"
@@ -76,6 +80,7 @@ func run(logger *slog.Logger) (err error) {
 	if err != nil {
 		return err
 	}
+
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer shutdownCancel()
@@ -90,12 +95,14 @@ func newBotRuntime(
 	rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (app *botRuntime, err error) {
 	limiter := httputils.NewRateLimiter(rcfg.RateLimiterRequestsPerSecond, rcfg.ReateLimiterMaxBurst)
+	metrics := appmetrics.New("bot")
 	app = &botRuntime{
 		logger:   logger,
 		grpcPort: cfg.BotGRPCPort,
 		grpcServer: grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
 				limiter.UnaryServerInterceptor(),
+				metrics.UnaryServerInterceptor(),
 			)),
 	}
 	defer func() {
@@ -126,7 +133,10 @@ func newBotRuntime(
 	}
 
 	botPort := adapters.NewBotPort(app.botApp.Bot, logger)
-	app.httpServer = newBotHTTPServer(cfg, limiter, logger, botPort)
+	app.httpServer, err = newBotHTTPServer(cfg, limiter, logger, botPort, metrics)
+	if err != nil {
+		return nil, err
+	}
 	pb.RegisterBotServer(app.grpcServer, server.NewBotGRPCServer(logger, botPort))
 
 	app.kafkaReader, app.kafkaWriter, err = initKafka(ctx, &cfg, &rcfg, logger, botPort)
@@ -183,18 +193,35 @@ func newScrapperPort(
 
 func newBotHTTPServer(
 	cfg infrastructure.Config, limiter *httputils.RateLimiter,
-	logger *slog.Logger, botPort ports.BotPort,
-) *http.Server {
+	logger *slog.Logger, botPort ports.BotPort, metrics *appmetrics.Metrics,
+) (*http.Server, error) {
 	var serv oapibot.ServerInterface = server.New(logger, botPort)
 	mux := http.NewServeMux()
 	handler := oapibot.HandlerFromMux(serv, mux)
 
 	limitedHandler := limiter.Middleware(handler)
+	handlerWithMetrics := metrics.Middleware(limitedHandler)
+
+	reg := prometheus.NewRegistry()
+	err := reg.Register(collectors.NewGoCollector(
+		collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll),
+	))
+	if err != nil {
+		return nil, err
+	}
+	err = metrics.Register(reg)
+	if err != nil {
+		return nil, err
+	}
+
+	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	}))
 
 	return &http.Server{
 		Addr:    cfg.ServerURL,
-		Handler: limitedHandler,
-	}
+		Handler: handlerWithMetrics,
+	}, nil
 }
 
 func (app *botRuntime) Run(ctx context.Context) error {
