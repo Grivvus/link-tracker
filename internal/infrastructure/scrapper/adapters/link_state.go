@@ -10,6 +10,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
+	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
 )
 
 type GitHubClient interface {
@@ -28,24 +29,37 @@ type LinkStateAdapter struct {
 	logger              *slog.Logger
 	ghClient            GitHubClient
 	stackoverflowClient StackoverflowClient
+	metrics             *appmetrics.ScrapperMetrics
 }
 
 func NewLinkStateAdapter(
 	logger *slog.Logger, ghClient GitHubClient,
 	stackoverflowClient StackoverflowClient,
+	metrics *appmetrics.ScrapperMetrics,
 ) ports.LinkStatePort {
 	return &LinkStateAdapter{
 		logger:              logger,
 		ghClient:            ghClient,
 		stackoverflowClient: stackoverflowClient,
+		metrics:             metrics,
 	}
 }
 
 func (a *LinkStateAdapter) Fetch(ctx context.Context, link domain.Link) ([]model.LinkState, error) {
+	start := time.Now()
 	switch link.URL.Hostname() {
 	case "github.com":
+		// duplicate defer block, so it doesn't execute on a default branch
+		defer func() {
+			duration := time.Since(start).Seconds() * 1000
+			a.metrics.RequestDurationMSTotal.WithLabelValues("external_source", "github").Observe(duration)
+		}()
 		return a.fetchGH(ctx, link)
 	case "stackoverflow.com":
+		defer func() {
+			duration := time.Since(start).Seconds() * 1000
+			a.metrics.RequestDurationMSTotal.WithLabelValues("external_source", "stackoverflow").Observe(duration)
+		}()
 		return a.fetchStackoverflow(ctx, link)
 	default:
 		return nil, fmt.Errorf("%w: url: %s", ports.ErrBadURL, link.URL.String())

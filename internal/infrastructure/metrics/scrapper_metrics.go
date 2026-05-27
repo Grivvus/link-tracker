@@ -1,9 +1,13 @@
 package metrics
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
 )
 
 type ScrapperMetrics struct {
@@ -11,12 +15,14 @@ type ScrapperMetrics struct {
 	LinkOnTrackTotal       *prometheus.GaugeVec
 	RequestDurationMSTotal *prometheus.HistogramVec
 	APIRequestsTotal       *prometheus.CounterVec
+	repo                   repository.LinksMetricsRepository
 }
 
-func NewScrapperMetrics() *ScrapperMetrics {
+func NewScrapperMetrics(repo repository.LinksMetricsRepository) *ScrapperMetrics {
 	const namespace = "scrapper"
 	return &ScrapperMetrics{
-		RED: New(namespace),
+		repo: repo,
+		RED:  New(namespace),
 		LinkOnTrackTotal: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
@@ -55,4 +61,25 @@ func (m *ScrapperMetrics) Register(registry *prometheus.Registry) error {
 	}
 
 	return err
+}
+
+func (m *ScrapperMetrics) LinksOnTrackCntJob(
+	ctx context.Context, logger *slog.Logger, period time.Duration,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			gh, st, err := m.repo.TrackedLinksCount(ctx)
+			if err != nil {
+				logger.Error("can't get LinksOnTrack metric", "err", err)
+			} else {
+				m.LinkOnTrackTotal.WithLabelValues("github").Set(float64(gh))
+				m.LinkOnTrackTotal.WithLabelValues("stackoverflow").Set(float64(st))
+			}
+		}
+
+		time.Sleep(period)
+	}
 }

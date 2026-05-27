@@ -49,6 +49,7 @@ type repositories struct {
 	chat         repository.ChatRepository
 	subscription repository.SubscriptionRepository
 	outbox       repository.NotificationOutboxRepository
+	linkMetrics  repository.LinksMetricsRepository
 	close        func()
 }
 
@@ -61,6 +62,7 @@ type scrapperRuntime struct {
 	grpcClient   *grpc.ClientConn
 	kafkaWriter  *kafka.Writer
 	scheduler    gocron.Scheduler
+	metrics      *appmetrics.ScrapperMetrics
 	closeStorage func()
 	closeCache   func()
 }
@@ -107,7 +109,13 @@ func newScrapperRuntime(
 	ctx context.Context, cfg infrastructure.Config, rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (*scrapperRuntime, error) {
 	var err error
-	metrics := appmetrics.New("scrapper")
+
+	repos, err := newRepositories(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("can't init repository: %w", err)
+	}
+
+	metrics := appmetrics.NewScrapperMetrics(repos.linkMetrics)
 	limiter := httputils.NewRateLimiter(rcfg.RateLimiterRequestsPerSecond, rcfg.ReateLimiterMaxBurst)
 	app := &scrapperRuntime{
 		logger:   logger,
@@ -115,8 +123,9 @@ func newScrapperRuntime(
 		grpcServer: grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
 				limiter.UnaryServerInterceptor(),
-				metrics.UnaryServerInterceptor(),
+				metrics.RED.UnaryServerInterceptor(),
 			)),
+		metrics: metrics,
 	}
 	defer func() {
 		if err == nil {
@@ -139,10 +148,6 @@ func newScrapperRuntime(
 	app.grpcClient = grpcClient
 	app.kafkaWriter = kafkaWriter
 
-	repos, err := newRepositories(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("can't init repository: %w", err)
-	}
 	app.closeStorage = repos.close
 
 	baseScrapperPort := adapters.NewScrapperAdapter(logger, repos.chat, repos.subscription)
@@ -156,7 +161,7 @@ func newScrapperRuntime(
 	}
 	app.closeCache = vkClient.Close
 	linksCache := cache.NewValkeyLinksCache(logger, vkClient, time.Duration(cfg.ValkeyTTLSeconds)*time.Second)
-	scrapperPort := adapters.NewScrapperCachedAdapter(logger, baseScrapperPort, linksCache)
+	scrapperPort := adapters.NewScrapperCachedAdapter(logger, baseScrapperPort, linksCache, metrics)
 
 	app.httpServer, err = newScrapperHTTPServer(cfg, limiter, logger, scrapperPort, metrics)
 	if err != nil {
@@ -164,7 +169,7 @@ func newScrapperRuntime(
 	}
 	pb.RegisterScrapperServer(app.grpcServer, server.NewScrapperGRPCServe(logger, scrapperPort))
 
-	app.scheduler, err = newScheduler(ctx, cfg, rcfg, logger, botPort, repos.outbox, repos.subscription)
+	app.scheduler, err = newScheduler(ctx, cfg, rcfg, logger, botPort, repos.outbox, repos.subscription, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +190,7 @@ func newScheduler(
 	botPort ports.BotPort,
 	notificationOutboxRepo repository.NotificationOutboxRepository,
 	subscriptionRepo repository.SubscriptionRepository,
+	metrics *appmetrics.ScrapperMetrics,
 ) (gocron.Scheduler, error) {
 	shouldRetryOnHTTP, err := rcfg.GetRetryHTTPCodes()
 	if err != nil {
@@ -197,6 +203,7 @@ func newScheduler(
 		logger,
 		clients.NewGitHubClient(logger, rcfg, shouldRetryFn),
 		clients.NewStackoverflowClient(logger, rcfg, shouldRetryFn),
+		metrics,
 	)
 
 	sched, err := gocron.NewScheduler()
@@ -288,7 +295,7 @@ func newBotPort(
 func newScrapperHTTPServer(
 	cfg infrastructure.Config, limiter *httputils.RateLimiter,
 	logger *slog.Logger, scrapperPort ports.ScrapperPort,
-	metrics *appmetrics.Metrics,
+	metrics *appmetrics.ScrapperMetrics,
 ) (*http.Server, error) {
 	var httpServInterface scrapperapi.ServerInterface = server.NewScrapperServer(logger, scrapperPort)
 	mux := http.NewServeMux()
@@ -303,7 +310,7 @@ func newScrapperHTTPServer(
 
 	handler := scrapperapi.HandlerFromMux(httpServInterface, mux)
 	limitedHandler := limiter.Middleware(handler)
-	handlerWithMetrics := metrics.Middleware(limitedHandler)
+	handlerWithMetrics := metrics.RED.Middleware(limitedHandler)
 
 	reg := prometheus.NewRegistry()
 	err = reg.Register(collectors.NewGoCollector(
@@ -357,6 +364,8 @@ func (app *scrapperRuntime) Run(ctx context.Context) error {
 		}
 		app.logger.Info("grpc server has been stopped")
 	}()
+
+	go app.metrics.LinksOnTrackCntJob(ctx, app.logger, 30*time.Second)
 
 	select {
 	case <-ctx.Done():
@@ -424,6 +433,7 @@ func newRepositories(ctx context.Context, cfg infrastructure.Config) (repositori
 			chat:         sql.NewChatRepository(pool),
 			subscription: sql.NewSubscriptionRepository(pool, cfg.DBLinksPageSize),
 			outbox:       sql.NewNotificationOutboxRepository(pool),
+			linkMetrics:  sql.NewLinksMetricsRepository(pool),
 			close:        pool.Close,
 		}, nil
 	case "ORM":
@@ -439,6 +449,7 @@ func newRepositories(ctx context.Context, cfg infrastructure.Config) (repositori
 			chat:         orm.NewChatRepository(pool),
 			subscription: orm.NewSubscriptionRepository(pool, cfg.DBLinksPageSize),
 			outbox:       orm.NewNotificationOutboxRepository(pool),
+			linkMetrics:  orm.NewLinksMetricsRepository(pool),
 			close:        pool.Close,
 		}, nil
 	case "MEM":
