@@ -14,7 +14,6 @@ type ScrapperMetrics struct {
 	RED                    *Metrics
 	LinkOnTrackTotal       *prometheus.GaugeVec
 	RequestDurationMSTotal *prometheus.HistogramVec
-	APIRequestsTotal       *prometheus.CounterVec
 	repo                   repository.LinksMetricsRepository
 }
 
@@ -37,13 +36,6 @@ func NewScrapperMetrics(repo repository.LinksMetricsRepository) *ScrapperMetrics
 			},
 			[]string{"scope", "scope_type"},
 		),
-		APIRequestsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Name:      "api_requests_total",
-			},
-			[]string{"source"},
-		),
 	}
 }
 
@@ -59,6 +51,11 @@ func (m *ScrapperMetrics) Register(registry *prometheus.Registry) error {
 	if err != nil {
 		return err
 	}
+
+	registry.MustRegister(
+		m.LinkOnTrackTotal,
+		m.RequestDurationMSTotal,
+	)
 
 	return err
 }

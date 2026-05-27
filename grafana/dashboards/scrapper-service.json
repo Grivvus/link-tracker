@@ -178,7 +178,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\", status!=\"0\"}[5m])) / sum(rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\"}[5m]))",
+          "expr": "sum(rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\", code=~\"2|4|12|13|14|15\"}[5m])) / sum(rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\"}[5m]))",
           "refId": "A"
         }
       ]
@@ -252,7 +252,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum by (method) (rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\", status!=\"0\"}[5m])) / sum by (method) (rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\"}[5m]))",
+          "expr": "sum by (method) (rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\", code=~\"2|4|12|13|14|15\"}[5m])) / sum by (method) (rate(scrapper_grpc_requests_total{job=\"prometheus-scrapper\"}[5m]))",
           "legendFormat": "{{method}}",
           "refId": "A"
         }
