@@ -8,17 +8,20 @@ import (
 	"github.com/go-telegram/bot"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
+	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
 )
 
 type BotAdapter struct {
-	bot *bot.Bot
-	log *slog.Logger
+	bot     *bot.Bot
+	log     *slog.Logger
+	metrics *appmetrics.BotMetrics
 }
 
-func NewBotPort(bot *bot.Bot, logger *slog.Logger) ports.BotPort {
+func NewBotPort(bot *bot.Bot, logger *slog.Logger, botmetrics *appmetrics.BotMetrics) ports.BotPort {
 	return &BotAdapter{
-		bot: bot,
-		log: logger,
+		bot:     bot,
+		log:     logger,
+		metrics: botmetrics,
 	}
 }
 
@@ -37,7 +40,10 @@ func (b *BotAdapter) NotifyAboutUpdatedLinks(
 					"err", err,
 					"to chat", chatID,
 				)
+				return
 			}
+
+			b.metrics.SentNotificationsTotal.Inc()
 		}(chatID)
 	}
 	return nil

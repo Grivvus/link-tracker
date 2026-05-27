@@ -17,6 +17,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
+	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
 )
 
 const (
@@ -67,12 +68,14 @@ type BotApplication struct {
 	logger        *slog.Logger
 	scrapperPort  ports.ScrapperPort
 	retrier       *retry.Retrier
+	metrics       *appmetrics.BotMetrics
 }
 
 func New(
 	ctx context.Context, cfg infrastructure.Config,
 	logger *slog.Logger, sp ports.ScrapperPort,
 	rcfg infrastructure.ReliabiltyConfig,
+	metrics *appmetrics.BotMetrics,
 ) (*BotApplication, error) {
 	retrier := retry.New(
 		retry.Attempts(uint(rcfg.RetryPolicy)),
@@ -97,6 +100,7 @@ func New(
 	app.dialogStorage = newDialogDraftsStorage(logger)
 	appInit(ctx, app)
 	app.retrier = retrier
+	app.metrics = metrics
 	return app, nil
 }
 
@@ -110,6 +114,8 @@ func (bapp *BotApplication) DefaultHandler(ctx context.Context, b *bot.Bot, upda
 }
 
 func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	start := time.Now()
+
 	_ = bapp.sendMsgWithRetry(b, ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   startMsgText,
@@ -131,6 +137,13 @@ func (bapp *BotApplication) StartHandler(ctx context.Context, b *bot.Bot, update
 		ChatID: update.Message.Chat.ID,
 		Text:   msgChatRegisteredOK,
 	})
+
+	const methodName = "start"
+	// .Milliseconds() returns int64, so i get .Seconds() * 1000
+	duration := time.Since(start).Seconds() * 1000
+	bapp.metrics.CommandDurationMSTotal.
+		WithLabelValues( /* scope */ "sync", methodName).Observe(duration)
+	bapp.metrics.CommandRequestsTotatl.WithLabelValues(methodName).Inc()
 }
 
 func (bapp *BotApplication) HelpHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -176,6 +189,8 @@ func (bapp *BotApplication) TrackHandler(ctx context.Context, b *bot.Bot, update
 }
 
 func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	start := time.Now()
+
 	bapp.logger.Info("InputHandler was called for", "chat", update.Message.Chat.ID)
 	userID := update.Message.From.ID
 	chatID := update.Message.Chat.ID
@@ -247,6 +262,12 @@ func (bapp *BotApplication) InputHandler(ctx context.Context, b *bot.Bot, update
 			Text:   msgTrackSaveOK,
 		})
 		bapp.fsm.Transition(userID, Default, ctx, b, chatID, userID)
+
+		const methodName = "track"
+		duration := time.Since(start).Seconds() * 1000
+		bapp.metrics.CommandDurationMSTotal.
+			WithLabelValues( /* scope */ "sync", methodName).Observe(duration)
+		bapp.metrics.CommandRequestsTotatl.WithLabelValues(methodName).Inc()
 	default:
 		bapp.logger.Error(
 			"TrackHandler. Illegal state of fsm",
@@ -276,6 +297,7 @@ func (bapp *BotApplication) CancelHandler(ctx context.Context, b *bot.Bot, updat
 }
 
 func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	start := time.Now()
 	bapp.logger.Info("Untrack handler was called for", "chat", update.Message.Chat.ID)
 	text := update.Message.Text
 	textWords := strings.Split(text, " ")
@@ -311,9 +333,17 @@ func (bapp *BotApplication) UntrackHandler(ctx context.Context, b *bot.Bot, upda
 		ChatID: update.Message.Chat.ID,
 		Text:   fmt.Sprintf(msgUntrackFmt, resp.RawURL),
 	})
+
+	const methodName = "untrack"
+	duration := time.Since(start).Seconds() * 1000
+	bapp.metrics.CommandDurationMSTotal.
+		WithLabelValues( /* scope */ "sync", methodName).Observe(duration)
+	bapp.metrics.CommandRequestsTotatl.WithLabelValues(methodName).Inc()
 }
 
 func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	start := time.Now()
+
 	bapp.logger.Info("List handler was called for", "chat", update.Message.Chat.ID)
 	chatID := update.Message.Chat.ID
 	var filter string
@@ -350,6 +380,12 @@ func (bapp *BotApplication) ListHandler(ctx context.Context, b *bot.Bot, update 
 		ChatID: update.Message.Chat.ID,
 		Text:   buildListAnswer(resp, filter),
 	})
+
+	const methodName = "list"
+	duration := time.Since(start).Seconds() * 1000
+	bapp.metrics.CommandDurationMSTotal.
+		WithLabelValues( /* scope */ "sync", methodName).Observe(duration)
+	bapp.metrics.CommandRequestsTotatl.WithLabelValues(methodName).Inc()
 }
 
 func (bapp *BotApplication) sendMsgWithRetry(

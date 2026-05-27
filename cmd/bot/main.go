@@ -95,14 +95,14 @@ func newBotRuntime(
 	rcfg infrastructure.ReliabiltyConfig, logger *slog.Logger,
 ) (app *botRuntime, err error) {
 	limiter := httputils.NewRateLimiter(rcfg.RateLimiterRequestsPerSecond, rcfg.ReateLimiterMaxBurst)
-	metrics := appmetrics.New("bot")
+	metrics := appmetrics.NewBotMetrics()
 	app = &botRuntime{
 		logger:   logger,
 		grpcPort: cfg.BotGRPCPort,
 		grpcServer: grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
 				limiter.UnaryServerInterceptor(),
-				metrics.UnaryServerInterceptor(),
+				metrics.RED.UnaryServerInterceptor(),
 			)),
 	}
 	defer func() {
@@ -127,12 +127,12 @@ func newBotRuntime(
 	}
 	app.grpcClient = grpcClient
 
-	app.botApp, err = botapp.New(ctx, cfg, logger, scrapperPort, rcfg)
+	app.botApp, err = botapp.New(ctx, cfg, logger, scrapperPort, rcfg, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("can't start bot: %w", err)
 	}
 
-	botPort := adapters.NewBotPort(app.botApp.Bot, logger)
+	botPort := adapters.NewBotPort(app.botApp.Bot, logger, metrics)
 	app.httpServer, err = newBotHTTPServer(cfg, limiter, logger, botPort, metrics)
 	if err != nil {
 		return nil, err
@@ -193,14 +193,14 @@ func newScrapperPort(
 
 func newBotHTTPServer(
 	cfg infrastructure.Config, limiter *httputils.RateLimiter,
-	logger *slog.Logger, botPort ports.BotPort, metrics *appmetrics.Metrics,
+	logger *slog.Logger, botPort ports.BotPort, metrics *appmetrics.BotMetrics,
 ) (*http.Server, error) {
 	var serv oapibot.ServerInterface = server.New(logger, botPort)
 	mux := http.NewServeMux()
 	handler := oapibot.HandlerFromMux(serv, mux)
 
 	limitedHandler := limiter.Middleware(handler)
-	handlerWithMetrics := metrics.Middleware(limitedHandler)
+	handlerWithMetrics := metrics.RED.Middleware(limitedHandler)
 
 	reg := prometheus.NewRegistry()
 	err := reg.Register(collectors.NewGoCollector(
