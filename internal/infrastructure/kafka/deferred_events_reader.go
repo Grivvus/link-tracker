@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	kafkago "github.com/segmentio/kafka-go"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/infrastructure/avro"
 )
 
 type OffsetTracker interface {

@@ -7,11 +7,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
-	gen "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql/gen"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/scrapper/repository"
+	"link-tracker/internal/domain"
+	"link-tracker/internal/infrastructure/openapi/bot"
+	gen "link-tracker/internal/infrastructure/storage/sql/gen"
 )
 
 func toDomainLink(link gen.Link) (domain.Link, error) {

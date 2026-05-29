@@ -23,11 +23,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/kafka"
-	commonKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/infrastructure/avro"
+	"link-tracker/internal/infrastructure/bot/kafka"
+	commonKafka "link-tracker/internal/infrastructure/kafka"
 )
 
 const groupID = "bot-events-reader"
@@ -144,18 +144,33 @@ func (s *EventsReaderTestSuite) SetupSuite() {
 	}
 
 	var err error
-	s.kafkaService, err = testcontainers.GenericContainer(
-		context.Background(), testcontainers.GenericContainerRequest{
-			ContainerRequest: kafkaContainer,
-			Started:          true,
-		})
-	s.Require().NoError(err)
+	s.kafkaService, err = startKafkaContainer(context.Background(), kafkaContainer)
+	if err != nil {
+		s.T().Skipf("docker is required for kafka integration tests: %v", err)
+		return
+	}
 	s.Require().NoError(waitBrokerReady(context.Background(), brokerAddr))
 
 	schema, err := os.ReadFile(avroSchemaPath)
 	s.Require().NoError(err)
 	s.avroCodec, err = avro.NewCodecFromSchema(string(schema), testSchemaID)
 	s.Require().NoError(err)
+}
+
+func startKafkaContainer(
+	ctx context.Context,
+	req testcontainers.ContainerRequest,
+) (container testcontainers.Container, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("start kafka container: %v", recovered)
+		}
+	}()
+
+	return testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
 }
 
 func (s *EventsReaderTestSuite) SetupTest() {

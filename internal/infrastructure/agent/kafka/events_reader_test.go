@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/agent/usecase"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent/adapters"
-	agentKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent/kafka"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
-	commonKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
+	"link-tracker/internal/application/agent/usecase"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/infrastructure/agent"
+	"link-tracker/internal/infrastructure/agent/adapters"
+	agentKafka "link-tracker/internal/infrastructure/agent/kafka"
+	"link-tracker/internal/infrastructure/avro"
+	commonKafka "link-tracker/internal/infrastructure/kafka"
 )
 
 const agentReaderGroupID = "agent-events-reader"
@@ -121,18 +121,33 @@ func (s *RawEventsReaderIntegrationSuite) SetupSuite() {
 	}
 
 	var err error
-	s.kafkaService, err = testcontainers.GenericContainer(
-		context.Background(), testcontainers.GenericContainerRequest{
-			ContainerRequest: kafkaContainer,
-			Started:          true,
-		})
-	s.Require().NoError(err)
+	s.kafkaService, err = startKafkaContainer(context.Background(), kafkaContainer)
+	if err != nil {
+		s.T().Skipf("docker is required for kafka integration tests: %v", err)
+		return
+	}
 	s.Require().NoError(waitBrokerReady(context.Background(), agentBrokerAddr))
 
 	schema, err := os.ReadFile(agentAvroSchemaPath)
 	s.Require().NoError(err)
 	s.avroCodec, err = avro.NewCodecFromSchema(string(schema), agentTestSchemaID)
 	s.Require().NoError(err)
+}
+
+func startKafkaContainer(
+	ctx context.Context,
+	req testcontainers.ContainerRequest,
+) (container testcontainers.Container, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("start kafka container: %v", recovered)
+		}
+	}()
+
+	return testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
 }
 
 func (s *RawEventsReaderIntegrationSuite) SetupTest() {

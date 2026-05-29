@@ -7,10 +7,10 @@ import (
 	"log/slog"
 
 	"github.com/segmentio/kafka-go"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/agent/usecase"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
+	"link-tracker/internal/application/agent/usecase"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/infrastructure/avro"
 )
 
 var ErrRetryPolicyExceeded = errors.New("retry policy exceeded")

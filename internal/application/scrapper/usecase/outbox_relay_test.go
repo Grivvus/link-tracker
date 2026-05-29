@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/stretchr/testify/require"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"link-tracker/internal/application/model"
 )
 
 type fakeRelayBotPort struct {

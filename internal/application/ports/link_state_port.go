@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/domain"
 )
 
 var ErrBadResponse = errors.New("got non 2XX response code")

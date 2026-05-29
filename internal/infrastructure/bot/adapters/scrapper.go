@@ -13,13 +13,13 @@ import (
 
 	"github.com/avast/retry-go/v5"
 	"github.com/sony/gobreaker/v2"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
-	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/scrapper"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/infrastructure"
+	pb "link-tracker/internal/infrastructure/grpc/scrapper"
+	"link-tracker/internal/infrastructure/openapi/scrapper"
 )
 
 type ScrapperAdapter struct {

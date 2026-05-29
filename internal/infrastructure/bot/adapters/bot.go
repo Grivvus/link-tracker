@@ -6,9 +6,9 @@ import (
 	"log/slog"
 
 	"github.com/go-telegram/bot"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	appmetrics "link-tracker/internal/infrastructure/metrics"
 )
 
 type BotAdapter struct {

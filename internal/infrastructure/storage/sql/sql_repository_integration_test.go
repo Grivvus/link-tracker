@@ -20,11 +20,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
-	memstorage "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage"
-	sqlrepo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/scrapper/repository"
+	"link-tracker/internal/domain"
+	memstorage "link-tracker/internal/infrastructure/storage"
+	sqlrepo "link-tracker/internal/infrastructure/storage/sql"
 )
 
 type repoPair struct {

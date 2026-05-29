@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/repository"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"link-tracker/internal/application/bot/repository"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/domain"
 )
 
 const initialCap = 10

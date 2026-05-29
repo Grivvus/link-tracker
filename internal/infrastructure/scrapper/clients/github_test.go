@@ -11,9 +11,9 @@ import (
 
 	"github.com/sony/gobreaker/v2"
 	"github.com/stretchr/testify/require"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/domain"
+	"link-tracker/internal/infrastructure"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

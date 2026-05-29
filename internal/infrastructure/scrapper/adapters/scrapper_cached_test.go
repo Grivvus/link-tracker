@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/infrastructure/scrapper/adapters"
 )
 
 type testCache struct {
@@ -111,7 +111,7 @@ func TestCachedAdapter_AddLinkInvalidatesCacheAndNextGetUsesDB(t *testing.T) {
 			chatID: cloneTrackedLinks(staleLinks),
 		},
 	}
-	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache)
+	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache, testScrapperMetrics())
 
 	added, err := adapter.AddLink(ctx, model.TrackLinkCmd{
 		ChatID: chatID,
@@ -163,7 +163,7 @@ func TestCachedAdapter_DeleteLinkInvalidatesCacheAndNextGetUsesDB(t *testing.T) 
 			chatID: cloneTrackedLinks(dbLinks),
 		},
 	}
-	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache)
+	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache, testScrapperMetrics())
 
 	deleted, err := adapter.DeleteLink(ctx, model.UntrackLinkCmd{
 		ChatID: chatID,
@@ -201,7 +201,7 @@ func TestCachedAdapter_GetTrackedLinksFillsCacheAndNextGetUsesCache(t *testing.T
 			chatID: cloneTrackedLinks(dbLinks),
 		},
 	}
-	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache)
+	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache, testScrapperMetrics())
 
 	firstLinks, err := adapter.GetTrackedLinks(ctx, model.ListTrackedLinksQuery{ChatID: chatID})
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestCachedAdapter_GetTrackedLinksCacheHitDoesNotCallNext(t *testing.T) {
 			},
 		},
 	}
-	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache)
+	adapter := adapters.NewScrapperCachedAdapter(testLogger(), db, cache, testScrapperMetrics())
 
 	links, err := adapter.GetTrackedLinks(ctx, model.ListTrackedLinksQuery{ChatID: chatID})
 	require.NoError(t, err)

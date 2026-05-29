@@ -192,7 +192,7 @@ const file_grpc_bot_bot_proto_rawDesc = "" +
 	"\fPRIORITY_LOW\x10\x02\x12\x11\n" +
 	"\rPRIORITY_HIGH\x10\x012C\n" +
 	"\x03Bot\x12<\n" +
-	"\x11NotifyAboutUpdate\x12\x0f.bot.LinkUpdate\x1a\x16.google.protobuf.EmptyBgZegitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpcb\x06proto3"
+	"\x11NotifyAboutUpdate\x12\x0f.bot.LinkUpdate\x1a\x16.google.protobuf.EmptyB4Z2link-tracker/internal/infrastructure/grpc/bot;grpcb\x06proto3"
 
 var (
 	file_grpc_bot_bot_proto_rawDescOnce sync.Once

@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/avast/retry-go/v5"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
+	"link-tracker/internal/application/ports"
 )
 
 type HTTPError struct {

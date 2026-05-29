@@ -11,8 +11,8 @@ import (
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/riferrei/srclient"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/infrastructure/openapi/bot"
 )
 
 var SerializationError = errors.New("serialization error")

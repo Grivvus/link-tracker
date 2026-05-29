@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/valkey-io/valkey-go"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"link-tracker/internal/application/model"
 )
 
 var UnknownCacheError = errors.New("unknown cache error")

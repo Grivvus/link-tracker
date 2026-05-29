@@ -8,7 +8,7 @@ import (
 
 	"github.com/avast/retry-go/v5"
 	"github.com/stretchr/testify/require"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
+	"link-tracker/internal/application/ports"
 )
 
 type doerFunc func(*http.Request) (*http.Response, error)

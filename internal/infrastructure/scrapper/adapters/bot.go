@@ -10,13 +10,13 @@ import (
 
 	"github.com/avast/retry-go/v5"
 	"github.com/sony/gobreaker/v2"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
-	bp "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/openapi/bot"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/infrastructure"
+	bp "link-tracker/internal/infrastructure/grpc/bot"
+	"link-tracker/internal/infrastructure/openapi/bot"
 )
 
 type BotAdapter struct {

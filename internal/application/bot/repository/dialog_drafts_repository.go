@@ -3,7 +3,7 @@ package repository
 import (
 	"errors"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
+	"link-tracker/internal/application/model"
 )
 
 var ErrDialogAlreadyStarted = errors.New("dialog was already started")

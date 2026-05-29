@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	appmetrics "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/metrics"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/cache"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	appmetrics "link-tracker/internal/infrastructure/metrics"
+	"link-tracker/internal/infrastructure/scrapper/cache"
 )
 
 type ScrapperCachedAdapter struct {

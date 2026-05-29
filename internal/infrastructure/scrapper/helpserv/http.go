@@ -3,7 +3,7 @@ package helpserv
 import (
 	"net/http"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/storage/sql"
+	"link-tracker/internal/infrastructure/storage/sql"
 )
 
 type HelpServ struct {

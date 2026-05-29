@@ -6,12 +6,12 @@ import (
 	"log/slog"
 	"time"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
+	pb "link-tracker/internal/infrastructure/grpc/bot"
 )
 
 type BotGRPCServer struct {

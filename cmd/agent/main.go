@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/agent/usecase"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent/adapters"
-	agentKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/agent/kafka"
+	"link-tracker/internal/application/agent/usecase"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/infrastructure"
+	"link-tracker/internal/infrastructure/agent"
+	"link-tracker/internal/infrastructure/agent/adapters"
+	agentKafka "link-tracker/internal/infrastructure/agent/kafka"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/avro"
-	commonKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
+	"link-tracker/internal/infrastructure/avro"
+	commonKafka "link-tracker/internal/infrastructure/kafka"
 )
 
 const agentSettingsFname = "agent-settings.toml"

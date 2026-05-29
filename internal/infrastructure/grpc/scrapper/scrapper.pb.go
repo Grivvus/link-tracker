@@ -317,7 +317,7 @@ const file_grpc_scrapper_scrapper_proto_rawDesc = "" +
 	"DeleteChat\x12\x12.scrapper.TgChatId\x1a\x16.google.protobuf.Empty\x12B\n" +
 	"\x0fGetTrackedLinks\x12\x12.scrapper.TgChatId\x1a\x1b.scrapper.ListLinksResponse\x12E\n" +
 	"\x11AddLinkToTracking\x12\x18.scrapper.AddLinkRequest\x1a\x16.scrapper.LinkResponse\x12M\n" +
-	"\x16DeleteLinkFromTracking\x12\x1b.scrapper.RemoveLinkRequest\x1a\x16.scrapper.LinkResponseBJZHgitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-trackerb\x06proto3"
+	"\x16DeleteLinkFromTracking\x12\x1b.scrapper.RemoveLinkRequest\x1a\x16.scrapper.LinkResponseBAZ?link-tracker/internal/infrastructure/grpc/scrapper;link_trackerb\x06proto3"
 
 var (
 	file_grpc_scrapper_scrapper_proto_rawDescOnce sync.Once

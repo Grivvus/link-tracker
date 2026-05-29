@@ -8,9 +8,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/scrapper/repository"
+	"link-tracker/internal/domain"
 )
 
 const initialCap = 10

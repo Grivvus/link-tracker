@@ -9,10 +9,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/dto"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/adapters"
+	"link-tracker/internal/application/ports"
+	"link-tracker/internal/domain"
+	"link-tracker/internal/infrastructure/dto"
+	appmetrics "link-tracker/internal/infrastructure/metrics"
+	"link-tracker/internal/infrastructure/scrapper/adapters"
 )
 
 type GitHubClientMock struct {
@@ -109,6 +110,10 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func testScrapperMetrics() *appmetrics.ScrapperMetrics {
+	return appmetrics.NewScrapperMetrics(nil)
+}
+
 var testGithubUser = dto.SimpleUser{
 	Login: "test_gh_user123",
 	URL:   "https://github.com/test_user123",
@@ -143,7 +148,7 @@ func TestClient_FoundUpdate(t *testing.T) {
 		nil, nil, nil,
 	)
 
-	linkState := adapters.NewLinkStateAdapter(testLogger(), ghClient, nil)
+	linkState := adapters.NewLinkStateAdapter(testLogger(), ghClient, nil, testScrapperMetrics())
 	updates, err := linkState.Fetch(context.Background(), testLink)
 	require.NoError(t, err)
 	assert.Len(t, updates, 1)
@@ -183,7 +188,7 @@ Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deseru
 		nil, nil,
 	)
 
-	adapter := adapters.NewLinkStateAdapter(testLogger(), nil, stackoverflowClient)
+	adapter := adapters.NewLinkStateAdapter(testLogger(), nil, stackoverflowClient, testScrapperMetrics())
 	updates, err := adapter.Fetch(context.Background(), link)
 	require.NoError(t, err)
 	assert.Len(t, updates, 1)
@@ -218,7 +223,7 @@ func TestClient_NoNewEvents(t *testing.T) {
 		nil, nil, nil,
 	)
 
-	linkState := adapters.NewLinkStateAdapter(testLogger(), ghClient, nil)
+	linkState := adapters.NewLinkStateAdapter(testLogger(), ghClient, nil, testScrapperMetrics())
 	updates, err := linkState.Fetch(context.Background(), testLink)
 	require.NoError(t, err)
 	assert.Len(t, updates, 0)
@@ -240,7 +245,7 @@ func TestClient_ReturnsError(t *testing.T) {
 		nil, ports.ErrBadResponse, nil,
 	)
 
-	linkState := adapters.NewLinkStateAdapter(testLogger(), ghClient, nil)
+	linkState := adapters.NewLinkStateAdapter(testLogger(), ghClient, nil, testScrapperMetrics())
 	updates, err := linkState.Fetch(context.Background(), testLink)
 	require.ErrorIs(t, err, ports.ErrBadResponse)
 	assert.Len(t, updates, 0)

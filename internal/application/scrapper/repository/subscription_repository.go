@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/url"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/domain"
 )
 
 type SubscriptionRepository interface {

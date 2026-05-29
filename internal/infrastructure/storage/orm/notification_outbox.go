@@ -7,8 +7,8 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/repository"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/scrapper/repository"
 )
 
 type NotificationOutboxRepository struct {

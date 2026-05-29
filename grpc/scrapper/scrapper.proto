@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/empty.proto";
 
-option go_package = "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker";
+option go_package = "link-tracker/internal/infrastructure/grpc/scrapper;link_tracker";
 
 package scrapper;
 

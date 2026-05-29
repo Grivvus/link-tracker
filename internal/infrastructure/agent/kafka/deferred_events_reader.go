@@ -1,6 +1,6 @@
 package kafka
 
-import commonKafka "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/kafka"
+import commonKafka "link-tracker/internal/infrastructure/kafka"
 
 type DeferredRawEventsReader struct {
 	*commonKafka.DeferredEventsReader

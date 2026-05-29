@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/model"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/ports"
+	"link-tracker/internal/application/model"
+	"link-tracker/internal/application/ports"
 )
 
 type DummySummarizer struct {
